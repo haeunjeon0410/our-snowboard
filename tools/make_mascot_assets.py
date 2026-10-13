@@ -5,7 +5,6 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from scipy import ndimage
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -16,10 +15,7 @@ OUT.mkdir(parents=True, exist_ok=True)
 PRIMARY = (11, 99, 217)
 TILE_TOP = (248, 250, 252)    # 타일 위쪽(눈 쌓인 하늘빛) → 아래쪽(사이트 파랑 쪽으로 살짝)
 TILE_BOT = (212, 222, 236)      # 변환 창처럼 탁하고 연한 회청색
-INK = (50, 96, 160)           # 마스코트 머리의 남색 (이미지에서 직접 잰 값, 색 채운 머리용)
 ICON_INK = (107, 133, 175)    # 아이콘 선 색: 눈에 띄지 않는 탁한 회청색
-LINE = (42, 89, 152)          # 윤곽선 (마스코트 윤곽선 색)
-LENS = (146, 190, 242)        # 고글 렌즈·끈 (마스코트 렌즈 색)
 
 
 
@@ -86,44 +82,6 @@ def line_art(path, color=None, boost=1.0) -> Image.Image:
     out = Image.new("RGBA", rgb.size, color + (0,))
     out.putalpha(Image.fromarray((alpha * 255).astype(np.uint8)))
     return out
-
-
-def color_head(path) -> Image.Image:
-    """머리 선화의 닫힌 칸을 색으로 칠한다: 머리카락=남색, 얼굴·고글 테두리=흰색, 렌즈·끈=옅은 파랑.
-    선만 있는 그림보다 작은 크기에서 윤곽이 또렷하다."""
-    base = trim(line_art(path, color=(0, 0, 0), boost=1.3), pad_ratio=0.02)
-    a = np.asarray(base.getchannel("A")).astype(float) / 255
-    line = a > 0.45
-    lab, n = ndimage.label(~line)
-    H, W = line.shape
-    border = set(np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]]))) - {0}
-    out = np.zeros((H, W, 4), np.uint8)
-    inside = ~np.isin(lab, list(border)) | line                 # 머리 모양(바깥 배경 제외)
-    out[inside] = LINE + (255,)
-    regions = []
-    for i in range(1, n + 1):
-        if i in border:
-            continue
-        ys, xs = np.where(lab == i)
-        if len(ys) < 150:
-            continue
-        regions.append((i, len(ys), xs.mean() / W, ys.mean() / H))
-    goggles = [r for r in regions if abs(r[2] - 0.5) < 0.12 and 0.33 < r[3] < 0.62 and r[1] > 10000]
-    lens = max(goggles, key=lambda r: r[1])[0] if goggles else None
-    face = max((r for r in regions if r[3] > 0.66), key=lambda r: r[1], default=(None,))[0]
-    for i, size, cx, cy in regions:
-        if i == face or (i in [g[0] for g in goggles] and i != lens):
-            col = (255, 255, 255)
-        elif i == lens or size < 6000:
-            col = LENS
-        else:
-            col = INK
-        out[lab == i] = col + (255,)
-    img = Image.fromarray(out, "RGBA")
-    # 바깥 가장자리를 부드럽게
-    alpha = img.getchannel("A").filter(ImageFilter.GaussianBlur(1.2))
-    img.putalpha(alpha)
-    return img
 
 
 def app_icon(head: Image.Image, size: int, thicken=0) -> Image.Image:

@@ -3,7 +3,7 @@ import colorsys
 import io
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image
 
 # Machado et al. (2009), 심한 정도 1.0, 선형 RGB 기준
 SIM = {

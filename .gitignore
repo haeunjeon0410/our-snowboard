@@ -6,3 +6,5 @@ node_modules/
 samples/
 output/
 server/.cache/
+dist/
+.tmp_t/

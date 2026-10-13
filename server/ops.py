@@ -1,6 +1,8 @@
 """변환 작업: 자료 분석, 체크한 항목에 필요한 AI 작업만 실행, 결과 파일(웹 문서·점자) 만들기."""
 import re
 import threading
+import time
+import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -169,9 +171,17 @@ def start(job, raw_options: dict, ai_ok: bool | None = None) -> str:
     o["ai"] = llm.available() if ai_ok is None else ai_ok       # 이 요청이 AI를 써도 되는가 (접속 코드 확인 결과)
     tid = uuid.uuid4().hex[:12]
     TASKS[tid] = {"id": tid, "job": job["meta"]["id"], "status": "running", "done": 0, "total": 0, "step": "자료를 살펴보는 중",
-                  "files": [], "error": "", "note": "", "cancel": False, "failed": 0, "lock": threading.Lock()}
+                  "files": [], "error": "", "note": "", "cancel": False, "failed": 0, "t": time.time(), "lock": threading.Lock()}
     threading.Thread(target=_run, args=(job, o, TASKS[tid]), daemon=True).start()
     return tid
+
+
+def prune_tasks(max_age_s: float) -> int:
+    """끝난 지 오래된 작업 기록을 지운다 (서버를 오래 켜 둬도 메모리가 계속 늘지 않게)."""
+    old = [tid for tid, t in list(TASKS.items()) if t["status"] != "running" and time.time() - t["t"] > max_age_s]
+    for tid in old:
+        TASKS.pop(tid, None)
+    return len(old)
 
 
 def _safe_name(s: str) -> str:
@@ -203,6 +213,11 @@ def _run(job, o, task):
                     return
                 try:
                     if _work_page(job, pg, o):
+                        with task["lock"]:
+                            task["failed"] += 1
+                except Exception:                  # 한 쪽이 잘못돼도 나머지 쪽은 계속 처리한다
+                    traceback.print_exc()
+                    with task["lock"]:
                         task["failed"] += 1
                 finally:
                     with task["lock"]:
@@ -229,6 +244,5 @@ def _run(job, o, task):
         task["files"] = files
         task["status"] = "done"
     except Exception as e:  # 화면에는 짧게, 자세한 것은 서버 창에
-        import traceback
         traceback.print_exc()
         task["status"], task["error"] = "error", str(e)[:120]

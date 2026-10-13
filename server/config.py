@@ -35,6 +35,15 @@ PORT = int(os.environ.get("PORT", "8790"))
 # ── 공개 서버(인터넷에 올렸을 때)용 설정. 내 컴퓨터에서만 쓸 때는 모두 비워 둔다. ──
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "").rstrip("/")            # 예: https://아이디-our-snowboard.hf.space
 ACCESS_CODE = os.environ.get("ACCESS_CODE", "")                     # 있으면 이 코드를 아는 사람만 AI 항목을 쓸 수 있다
-DAILY_AI_LIMIT = int(os.environ.get("DAILY_AI_LIMIT", "0") or 0)    # 하루 AI 호출 상한 (0이면 제한 없음)
-DATA_TTL_HOURS = float(os.environ.get("DATA_TTL_HOURS", "0") or 0)  # 올린 자료를 이 시간이 지나면 지운다 (0이면 안 지움)
+
+
+def _num(name: str, cast, default=0):
+    try:
+        return cast(os.environ.get(name, "") or default)
+    except ValueError:
+        return default
+
+
+DAILY_AI_LIMIT = _num("DAILY_AI_LIMIT", int)         # 하루 AI 호출 상한 (0이면 제한 없음)
+DATA_TTL_HOURS = _num("DATA_TTL_HOURS", float)       # 올린 자료를 이 시간이 지나면 지운다 (0이면 안 지움)
 PUBLIC = bool(PUBLIC_URL)

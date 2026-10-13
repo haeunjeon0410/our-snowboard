@@ -11,6 +11,7 @@ from .extract import extract
 
 _lock = threading.Lock()
 _jobs: dict[str, dict] = {}   # id -> {"meta", "doc", "lock"}
+_build_locks: dict[str, threading.Lock] = {}   # 같은 파일을 동시에 올려도 한 번만 만들게
 
 
 def job_dir(jid: str) -> Path:
@@ -42,16 +43,22 @@ def create(pdf_bytes: bytes, filename: str, course: str = "", title: str = "") -
                 j["doc"]["course"] = j["meta"].get("course", "")
                 save(j)
             return jid
-    d = job_dir(jid)
-    d.mkdir(parents=True, exist_ok=True)
-    (d / "original.pdf").write_bytes(pdf_bytes)
-    doc = extract(d / "original.pdf", d)
-    doc["course"] = course
-    meta = {"id": jid, "filename": filename, "course": course, "title": title, "created": time.time(), "n_pages": doc["n_pages"]}
-    job = {"meta": meta, "doc": doc, "lock": threading.Lock()}
     with _lock:
-        _jobs[jid] = job
-    save(job)
+        build = _build_locks.setdefault(jid, threading.Lock())
+    with build:
+        with _lock:
+            if jid in _jobs:                       # 기다리는 사이에 다른 요청이 이미 만들었다
+                return jid
+        d = job_dir(jid)
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "original.pdf").write_bytes(pdf_bytes)
+        doc = extract(d / "original.pdf", d)
+        doc["course"] = course
+        meta = {"id": jid, "filename": filename, "course": course, "title": title, "created": time.time(), "n_pages": doc["n_pages"]}
+        job = {"meta": meta, "doc": doc, "lock": threading.Lock()}
+        with _lock:
+            _jobs[jid] = job
+        save(job)
     return jid
 
 
@@ -69,7 +76,8 @@ def cleanup(ttl_hours: float) -> int:
     return len(old)
 
 
-def start_cleanup_loop(ttl_hours: float, every_s: int = 600):
+def start_cleanup_loop(ttl_hours: float, every_s: int = 600, also=None):
+    """also: 같은 주기로 같이 부를 함수 (예: 끝난 작업 기록 지우기)"""
     if ttl_hours <= 0:
         return
 
@@ -77,6 +85,8 @@ def start_cleanup_loop(ttl_hours: float, every_s: int = 600):
         while True:
             try:
                 cleanup(ttl_hours)
+                if also:
+                    also()
             except Exception:
                 pass
             time.sleep(every_s)
@@ -86,12 +96,6 @@ def start_cleanup_loop(ttl_hours: float, every_s: int = 600):
 def get(jid: str):
     with _lock:
         return _jobs.get(jid)
-
-
-def listing():
-    with _lock:
-        items = [j["meta"] for j in _jobs.values()]
-    return sorted(items, key=lambda m: -m["created"])
 
 
 def load_existing():

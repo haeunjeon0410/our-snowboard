@@ -66,7 +66,7 @@ if not config.PUBLIC:
 @app.on_event("startup")
 def _startup():
     jobs.load_existing()
-    jobs.start_cleanup_loop(config.DATA_TTL_HOURS)
+    jobs.start_cleanup_loop(config.DATA_TTL_HOURS, also=lambda: ops.prune_tasks(config.DATA_TTL_HOURS * 3600))
 
 
 # ───────────── 화면 ─────────────

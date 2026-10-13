@@ -1,12 +1,13 @@
 // 확장 프로그램 백그라운드 흐름 시험 (크롬 없이): node extension/test_background.mjs
-// 실제 변환 서버(localhost:8790)가 켜져 있어야 한다. chrome.* 는 가짜로 대신한다. AI는 쓰지 않는 항목만 시험한다.
+// 실제 변환 서버(기본 localhost:8790, 다른 주소는 OSB_SERVER=http://localhost:8791)가 켜져 있어야 한다. chrome.* 는 가짜로 대신한다. AI는 쓰지 않는 항목만 시험한다.
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
+const SERVER = process.env.OSB_SERVER || 'http://localhost:8790';
 const downloads = [];
 let handler = null;
 const chrome = {
-  storage: { sync: { get: async () => ({}) } },
+  storage: { sync: { get: async (k) => (k === 'server' ? { server: SERVER } : {}) } },
   runtime: { onMessage: { addListener: (f) => { handler = f; } } },
   downloads: { download: async (o) => { downloads.push(o); return 1; } },
 };
@@ -22,7 +23,7 @@ const h = await ask({ type: 'health' });
 check('서버 상태 확인', h && h.ok === true, JSON.stringify(h));
 
 // 1) 파일 가져와서 올리기 → 자료 요약
-const p = await ask({ type: 'prepare', url: 'http://localhost:8790/mock/file/0', name: '2주차 학습자료', course: '경영정보시스템 (004)' });
+const p = await ask({ type: 'prepare', url: SERVER + '/mock/file/0', name: '2주차 학습자료', course: '경영정보시스템 (004)' });
 check('PDF를 가져와 올리고 자료 요약을 받음', p && p.ok && p.job && p.info && p.info.pages > 0, JSON.stringify(p && p.info));
 
 // 2) 변환 (AI 없이 되는 항목만) → 진행 → 완료
@@ -35,14 +36,14 @@ check('파일 이름에 과목·자료 이름이 들어감', st && st.files[0].n
 
 // 3) 다운로드
 const d = await ask({ type: 'download', files: st.files });
-check('다운로드 요청 2건', d && d.ok && downloads.length === 2 && downloads.every(x => x.url.startsWith('http://localhost:8790/api/tasks/')), downloads.map(x => x.filename).join(' / '));
+check('다운로드 요청 2건', d && d.ok && downloads.length === 2 && downloads.every(x => x.url.startsWith(SERVER + '/api/tasks/')), downloads.map(x => x.filename).join(' / '));
 const body = await (await fetch(downloads[0].url)).text();
 check('받은 웹 문서에 고대비·큰 글씨가 적용됨', body.includes('data-theme="hc"') && body.includes('--fs:26px'));
 
 // 4) 오류 처리
-let r = await ask({ type: 'prepare', url: 'http://localhost:8790/health', name: '가짜', course: '' });
+let r = await ask({ type: 'prepare', url: SERVER + '/health', name: '가짜', course: '' });
 check('PDF가 아니면 친절한 오류', r && r.ok === false && r.error.includes('PDF'), r && r.error);
-r = await ask({ type: 'prepare', url: 'http://localhost:8790/no-such-file', name: '없음', course: '' });
+r = await ask({ type: 'prepare', url: SERVER + '/no-such-file', name: '없음', course: '' });
 check('받기 실패(404)도 오류로', r && r.ok === false, r && r.error);
 
 console.log(fail ? `\n${fail}개 실패` : '\n모두 통과');

@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from server import braille_ko as B, color, config, enrich, extract, jobs, llm, ops, outputs  # noqa: E402
+from server import braille_ko as B, color, config, enrich, extract, jobs, ops, outputs  # noqa: E402
 from eval.braille_examples import EXAMPLES, to_unicode  # noqa: E402
 
 WS = re.compile(r"\s+")

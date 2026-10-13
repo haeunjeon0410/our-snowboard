@@ -31,9 +31,10 @@ def _check_daily_limit():
             n = 0
             try:
                 start = time.mktime(time.strptime(today, "%Y-%m-%d"))
-                for line in open(config.CACHE_DIR / "usage.jsonl", encoding="utf-8"):
-                    if json.loads(line).get("t", 0) >= start:
-                        n += 1
+                with open(config.CACHE_DIR / "usage.jsonl", encoding="utf-8") as f:
+                    for line in f:
+                        if json.loads(line).get("t", 0) >= start:
+                            n += 1
             except Exception:
                 pass
             _day.update(date=today, calls=n)
@@ -65,9 +66,13 @@ def chat(prompt: str, *, images=(), model=None, system=None, max_tokens=1500, ca
     key = json.dumps([model, system, prompt, img_hash, cache_extra], ensure_ascii=False)
     cp = _cache_path(key)
     if cp.exists():
-        with _lock:
-            usage_totals["cache_hits"] += 1
-        return json.loads(cp.read_text(encoding="utf-8"))["text"]
+        try:
+            text = json.loads(cp.read_text(encoding="utf-8"))["text"]
+            with _lock:
+                usage_totals["cache_hits"] += 1
+            return text
+        except Exception:
+            pass                                   # 쓰던 도중 끊긴 캐시 파일이면 무시하고 새로 부른다
     if not available():
         raise RuntimeError("API 키가 없습니다 (.env의 GATEWAY_API_KEY)")
     _check_daily_limit()
@@ -90,11 +95,14 @@ def chat(prompt: str, *, images=(), model=None, system=None, max_tokens=1500, ca
                     f.write(json.dumps({"t": time.time(), "model": m, "in": r.usage.prompt_tokens,
                                         "out": r.usage.completion_tokens}) + "\n")
             if text:
-                cp.write_text(json.dumps({"text": text}, ensure_ascii=False), encoding="utf-8")
+                tmp = cp.with_suffix(f".{threading.get_ident()}.tmp")       # 두 곳에서 동시에 써도 반쪽 파일이 남지 않게
+                tmp.write_text(json.dumps({"text": text}, ensure_ascii=False), encoding="utf-8")
+                tmp.replace(cp)
             return text
         except Exception as e:  # 429나 일시 오류는 잠깐 쉬고 다시, 그래도 안 되면 다른 모델
             last_err = e
-            time.sleep(2 + attempt * 3)
+            if attempt < 2:                        # 마지막 시도 뒤에는 기다릴 필요 없다
+                time.sleep(2 + attempt * 3)
     raise RuntimeError(f"AI 호출 실패: {str(last_err)[:200]}")
 
 
