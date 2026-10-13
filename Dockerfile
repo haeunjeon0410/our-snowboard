@@ -1,6 +1,9 @@
 # 공개 서버용 (Hugging Face Spaces 'Docker' 또는 Render/Fly 같은 곳). 내 컴퓨터에서 쓸 때는 필요 없음.
 FROM python:3.12-slim
 
+# PDF 결과물에 쓸 한글 글꼴(나눔고딕, OFL)
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-nanum && rm -rf /var/lib/apt/lists/*
+
 RUN useradd -m -u 1000 user
 WORKDIR /app
 COPY server/requirements.txt server/requirements.txt

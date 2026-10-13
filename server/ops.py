@@ -9,14 +9,16 @@ from pathlib import Path
 
 from PIL import Image
 
-from . import color, config, enrich, jobs, llm, render
+from . import color, config, enrich, jobs, llm, pdf_out, render
 from .extract import _needs_spacing
 
-_POOL = ThreadPoolExecutor(max_workers=3)
+_POOL = ThreadPoolExecutor(max_workers=6)          # 쪽 단위 동시 처리
+_FIG_POOL = ThreadPoolExecutor(max_workers=6)      # 한 쪽 안의 그림 설명 동시 처리 (쪽 풀과 분리해 서로 막지 않게)
 TASKS: dict[str, dict] = {}
 
 DEFAULTS = {"large": True, "contrast": False, "figures": True, "easy": False, "terms": False,
             "color": False, "colorType": "deutan", "braille": False,
+            "pdf": True, "html": False,        # 받는 형식: 대부분의 학생은 PDF로 보므로 PDF가 기본
             "ai": True}   # 'ai'는 start()가 접속 코드를 확인해 정한다 (요청으로 받은 값은 쓰지 않는다)
 TEXT_TYPES = ("paragraph", "heading", "list", "table")
 
@@ -71,6 +73,9 @@ def analyze(job, ai_ok: bool | None = None) -> dict:
     doc = job["doc"]
     figs = [b for pg in doc["pages"] for b in _figures(pg)]
     changed = any("colors" not in b for b in figs)
+    todo = [b for b in figs if "colors" not in b]
+    if len(todo) > 4:
+        list(_FIG_POOL.map(lambda b: _color_count(job, b), todo))      # 그림이 많으면 색 종류 세기를 동시에
     colored = sum(1 for b in figs if _color_count(job, b) >= 2)
     if changed:
         jobs.save(job)
@@ -122,12 +127,9 @@ def _work_page(job, pg, o) -> bool:
     ctx = (f"[과목: {course}] " if course else "") + " ".join(b.get("text", "") for b in pg["blocks"] if b["type"] in ("heading", "paragraph"))
     scanned = _scanned(pg)
     if o["figures"] or scanned:
-        for b in _figures(pg):
-            if b.get("ai_desc"):
-                continue
-            if b.get("fullpage") and not scanned:
-                continue
-            r = enrich.describe_figure((d / b["img"]).read_bytes(), b.get("fig_kind", "image"), ctx, b.get("fullpage", False))
+        todo = [b for b in _figures(pg) if not b.get("ai_desc") and not (b.get("fullpage") and not scanned)]
+        results = list(_FIG_POOL.map(lambda b: enrich.describe_figure((d / b["img"]).read_bytes(), b.get("fig_kind", "image"), ctx, b.get("fullpage", False)), todo))
+        for b, r in zip(todo, results):
             if "error" in r:
                 failed = True
             else:
@@ -163,6 +165,10 @@ def _clean_options(raw: dict) -> dict:
             o[k] = v if k == "colorType" else bool(v)
     if o["colorType"] not in ("deutan", "tritan"):
         o["colorType"] = "deutan"
+    if not (o["pdf"] or o["html"] or o["braille"]):      # 받는 형식이 하나도 없으면 PDF
+        o["pdf"] = True
+    if not o["html"]:                                    # 쉬운 한국어·영어 병기는 웹 문서에만 들어가므로 AI도 부르지 않는다
+        o["easy"] = o["terms"] = False
     return o
 
 
@@ -234,9 +240,19 @@ def _run(job, o, task):
         base = _safe_name(meta.get("title") or Path(meta["filename"]).stem)
         out_dir = jobs.job_dir(meta["id"]) / "out" / task["id"]
         out_dir.mkdir(parents=True, exist_ok=True)
-        html_path = out_dir / f"{base} (맞춤).html"
-        html_path.write_text(render.to_html(doc, jobs.job_dir(meta["id"]), o, title=meta.get("title") or Path(meta["filename"]).stem), encoding="utf-8")
-        files = [{"kind": "html", "name": html_path.name, "path": str(html_path)}]
+        title = meta.get("title") or Path(meta["filename"]).stem
+        files = []
+        if o["pdf"] and not pdf_out.available():            # 서버에 한글 글꼴이 없으면 PDF 대신 웹 문서로
+            o["pdf"], o["html"] = False, True
+            task["note"] = (task["note"] + " / " if task["note"] else "") + "PDF를 만들 한글 글꼴이 없어 웹 문서로 만들었어요"
+        if o["pdf"]:
+            pdf_path = out_dir / f"{base} (맞춤).pdf"
+            pdf_path.write_bytes(pdf_out.to_pdf(doc, jobs.job_dir(meta["id"]), o, title=title))
+            files.append({"kind": "pdf", "name": pdf_path.name, "path": str(pdf_path)})
+        if o["html"]:
+            html_path = out_dir / f"{base} (맞춤).html"
+            html_path.write_text(render.to_html(doc, jobs.job_dir(meta["id"]), o, title=title), encoding="utf-8")
+            files.append({"kind": "html", "name": html_path.name, "path": str(html_path)})
         if o["braille"]:
             brf = out_dir / f"{base} (점자).brf"
             brf.write_text(render.to_brf(doc, o), encoding="utf-8")

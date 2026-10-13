@@ -84,18 +84,23 @@
 `;
 
   // 고를 수 있는 항목. info(자료 요약)에 따라 해당 없는 것은 숨기거나 끈다.
-  const DEFAULTS = { large: true, contrast: false, figures: true, easy: false, terms: false, color: false, colorType: 'deutan', braille: false };
+  const DEFAULTS = { large: true, contrast: false, figures: true, easy: false, terms: false, color: false, colorType: 'deutan', pdf: true, html: false, braille: false };
   const OPTIONS = [
-    { key: 'large', label: '큰 글씨로 읽기', sub: '글씨를 키우고 줄 간격을 넓혀요' },
-    { key: 'contrast', label: '고대비', sub: '검정 바탕에 밝은 글씨' },
-    { key: 'figures', label: '그림·도식을 글로 설명', sub: '그림이 무엇을 보여 주는지 풀어 써요', ai: true, needs: 'figures', none: '이 자료에는 그림이 없어요' },
-    { key: 'easy', label: '쉬운 한국어로', sub: '어려운 문장을 짧고 쉽게 바꿔요', ai: true },
-    { key: 'terms', label: '영어 용어 함께', sub: '전문 용어 옆에 영어를 붙여요', ai: true },
-    { key: 'color', label: '색 구분 돕기', sub: n => `색이 칠해진 그림 ${n}개에 무늬를 넣어요`, needs: 'colorFigures', hideIfNone: true, select: true },
-    { key: 'braille', label: '점자 파일도 받기', sub: '점자 프린터용 .brf 파일을 함께 내려받아요' }
+    // 받는 형식
+    { key: 'pdf', group: '받는 형식', label: '원본 PDF', sub: '쪽 번호·배치 그대로, 접근성만 더해요' },
+    { key: 'html', group: '받는 형식', label: '읽기용 웹 문서', sub: '큰 글씨·고대비·소리 읽기 (원본과 배치가 달라요)' },
+    { key: 'braille', group: '받는 형식', label: '점자 파일', sub: '점자 프린터용 .brf 파일' },
+    // 넣을 것 (PDF·웹 문서 모두에 들어간다)
+    { key: 'figures', group: '넣을 것', label: '그림·도식을 글로 설명', sub: '그림이 무엇을 보여 주는지 풀어 써요', ai: true, needs: 'figures', none: '이 자료에는 그림이 없어요' },
+    { key: 'color', group: '넣을 것', label: '색 구분 돕기', sub: n => `색이 칠해진 그림 ${n}개에 무늬를 넣어요`, needs: 'colorFigures', hideIfNone: true, select: true },
+    // 읽기용 웹 문서에만 적용
+    { key: 'large', group: '웹 문서 설정', web: true, label: '큰 글씨로 읽기', sub: '글씨를 키우고 줄 간격을 넓혀요' },
+    { key: 'contrast', group: '웹 문서 설정', web: true, label: '고대비', sub: '검정 바탕에 밝은 글씨' },
+    { key: 'easy', group: '웹 문서 설정', web: true, label: '쉬운 한국어로', sub: '어려운 문장을 짧고 쉽게 바꿔요', ai: true },
+    { key: 'terms', group: '웹 문서 설정', web: true, label: '영어 용어 함께', sub: '전문 용어 옆에 영어를 붙여요', ai: true }
   ];
 
-  const SHORT = { large: '큰 글씨', contrast: '고대비', figures: '그림 설명', easy: '쉬운 한국어', terms: '영어 용어', color: '색 구분', braille: '점자' };
+  const SHORT = { large: '큰 글씨', contrast: '고대비', figures: '그림 설명', easy: '쉬운 한국어', terms: '영어 용어', color: '색 구분', pdf: 'PDF', html: '웹 문서', braille: '점자' };
 
   function h(tag, attrs, ...kids) {
     const e = document.createElement(tag);
@@ -175,8 +180,8 @@
       h('div', {}, h('b', {}, adapter.name || '자료'), h('small', {}, [adapter.sub, info ? `${info.pages}쪽` + (info.scanned ? ' · 스캔본은 글자를 자동으로 읽어요' : '') : ''].filter(Boolean).join(' · ') || ' ')));
 
     // 이 자료에는 쓸 수 없는 항목(그림이 없음, AI 키 없음). 저장된 내 선택(opts)은 건드리지 않고 보내는 값에서만 뺀다.
-    const unusable = (def) => !!(info && ((def.needs && !info[def.needs]) || (def.ai && !info.ai)));
-    const effective = () => { const o = { ...opts }; for (const d of OPTIONS) if (unusable(d)) o[d.key] = false; return o; };
+    const unusable = (def) => !!(info && ((def.needs && !info[def.needs]) || (def.ai && !info.ai))) || !!(def.web && !opts.html);
+    const effective = () => { const o = { ...opts }; for (const d of OPTIONS) if (unusable(d)) o[d.key] = false; if (!(o.pdf || o.html || o.braille)) o.pdf = true; return o; };
 
     function optionRow(def) {
       const none = def.needs && !info[def.needs];
@@ -185,7 +190,7 @@
       if (def.hideIfNone && none) return null;
       const input = h('input', { type: 'checkbox', disabled: off || null });
       input.checked = !off && !!opts[def.key];
-      input.addEventListener('change', () => { opts[def.key] = input.checked; if (def.select) sel.disabled = !input.checked; refreshHint(); });
+      input.addEventListener('change', () => { opts[def.key] = input.checked; if (def.select) sel.disabled = !input.checked; if (def.key === 'html') { render(); return; } refreshHint(); });
       let sel = null;
       if (def.select) {
         sel = h('select', { 'aria-label': '색각 유형' },
@@ -193,7 +198,7 @@
         sel.value = opts.colorType; sel.disabled = !opts[def.key] || off;
         sel.addEventListener('change', () => { opts.colorType = sel.value; });
       }
-      const sub = none ? def.none : noAI ? 'AI 키가 없어 쓸 수 없어요' : (typeof def.sub === 'function' ? def.sub(info[def.needs]) : def.sub);
+      const sub = none ? def.none : (def.web && !opts.html) ? '‘읽기용 웹 문서’를 고르면 쓸 수 있어요' : noAI ? 'AI 키가 없어 쓸 수 없어요' : (typeof def.sub === 'function' ? def.sub(info[def.needs]) : def.sub);
       return h('label', { class: 'opt' + (off ? ' off' : '') }, input, h('span', { class: 'l' }, def.label), def.ai ? h('span', { class: 'tag' }, 'AI') : h('span'),
         h('span', { class: 's' }, sub), sel ? h('span', { class: 'sel' }, sel) : null);
     }
@@ -217,7 +222,9 @@
         sumEl = h('span', { class: 'os' }, summary());
         const head = h('button', { class: 'ohead', type: 'button', 'aria-expanded': String(optOpen) }, h('span', { class: 'ol' }, '옵션'), sumEl,
           h('span', { class: 'oc', html: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>' }));
-        const list = h('div', { class: 'opts', id: 'osb-opts' }, ...defs.map(optionRow).filter(Boolean));
+        const rows = []; let lastGroup = '';
+        for (const d of defs) { const row = optionRow(d); if (!row) continue; if (d.group && d.group !== lastGroup) { lastGroup = d.group; rows.push(h('div', { class: 'lab', style: rows.length ? 'margin:14px 0 2px' : 'margin:8px 0 2px' }, d.group)); } rows.push(row); }
+        const list = h('div', { class: 'opts', id: 'osb-opts' }, ...rows);
         head.setAttribute('aria-controls', 'osb-opts');
         list.hidden = !optOpen;
         head.addEventListener('click', () => { optOpen = !optOpen; head.setAttribute('aria-expanded', String(optOpen)); list.hidden = !optOpen; });
@@ -291,7 +298,7 @@
       prepare: async () => ({ job: 'demo', info: sample?.info || { pages: 15, figures: 5, colorFigures: 2, scanned: 0, ai: true } }),
       loadOptions: async () => ({ ...DEFAULTS, color: true }), saveOptions: async () => {}, make: async () => 'x', status: async () => ({ status: 'running' }), save: async () => {}
     };
-    return open({ adapter, container, expanded: true, only: container ? ['large', 'figures', 'braille'] : null });
+    return open({ adapter, container, expanded: true, only: container ? ['pdf', 'figures', 'braille'] : null });
   }
 
   window.OSBPanel = { open, preview, DEFAULTS, OPTIONS, SHORT };

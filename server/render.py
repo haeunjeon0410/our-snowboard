@@ -2,7 +2,9 @@
 import base64
 import html as _html
 import io
+import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from PIL import Image
@@ -128,7 +130,21 @@ def _jpeg_b64(img: Image.Image, maxw=1100) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
-def _figure_html(b, pg, job_dir: Path, o) -> str:
+def _fix_all(doc, job_dir: Path, o) -> dict:
+    """색 구분을 켰을 때, 모든 그림의 보정을 한꺼번에(병렬로) 계산해 둔다. numpy가 GIL을 놓아서 스레드로 빨라진다."""
+    paths = {}
+    for pg in doc["pages"]:
+        for b in pg["blocks"]:
+            if b["type"] == "figure" and not (pg.get("ocr_done") and b.get("fullpage")) and (job_dir / b["img"]).exists():
+                paths[b["id"]] = job_dir / b["img"]
+    if not o["color"] or not paths:
+        return {}
+    with ThreadPoolExecutor(max_workers=min(4, os.cpu_count() or 2)) as ex:
+        results = list(ex.map(lambda p: color.fix_image(p, o["colorType"]), paths.values()))
+    return dict(zip(paths.keys(), results))
+
+
+def _figure_html(b, pg, job_dir: Path, o, fixed=None) -> str:
     d = b.get("ai_desc") or {}
     desc = d.get("desc") or " ".join(x for x in (d.get("summary"), d.get("detail")) if x)   # 예전 형식도 읽는다
     scanned_text = pg.get("ocr_done") and b.get("fullpage")
@@ -137,7 +153,7 @@ def _figure_html(b, pg, job_dir: Path, o) -> str:
     path = job_dir / b["img"]
     legend, img = "", None
     if o["color"] and path.exists():
-        img, pal = color.fix_image(path, o["colorType"])
+        img, pal = (fixed or {}).get(b["id"]) or color.fix_image(path, o["colorType"])
         if pal:
             legend = '<span class="leg">색을 무늬로도 구분했어요: ' + ", ".join(f"{_e(g['name'])}={_e(g['pattern'])}" for g in pal[:6]) + "</span>"
     if img is None and path.exists():
@@ -160,6 +176,7 @@ def to_html(doc: dict, job_dir: Path, o: dict, title: str = "") -> str:
              f'<p class="meta">{_e((doc.get("course") + " · ") if doc.get("course") else "")}{doc["n_pages"]}쪽</p>']
     if o["easy"] and any(p.get("easy") for p in doc["pages"]):
         parts.append('<p class="note"><span class="ai" style="margin:0">AI</span> 어려운 문장을 AI가 쉬운 한국어로 바꿨어요. 원문과 조금 다를 수 있어요.</p>')
+    fixed = _fix_all(doc, job_dir, o)
     for pg in doc["pages"]:
         easy = (pg.get("easy") or {}) if o["easy"] else {}
         terms = pg.get("terms") if o["terms"] else None
@@ -190,7 +207,7 @@ def to_html(doc: dict, job_dir: Path, o: dict, title: str = "") -> str:
             elif t == "code":
                 parts.append(f'<pre class="r" data-s="{_e(_speak_code(b["text"]))}"><code>{_e(b["text"])}</code></pre>')
             elif t == "figure":
-                parts.append(_figure_html(b, pg, job_dir, o))
+                parts.append(_figure_html(b, pg, job_dir, o, fixed))
         parts.append("</section>")
     parts.append("<footer>Our Snowboard로 변환했어요. <span class=\"ai\" style=\"margin:0\">AI</span> 표시가 있는 내용은 AI가 만들었고 틀릴 수 있어요.</footer>")
     bar = ('<div class="bar" role="toolbar" aria-label="보기 도구"><button data-a="smaller" aria-label="글씨 작게">가-</button>'

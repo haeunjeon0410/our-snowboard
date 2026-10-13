@@ -27,7 +27,7 @@ const p = await ask({ type: 'prepare', url: SERVER + '/mock/file/0', name: '2주
 check('PDF를 가져와 올리고 자료 요약을 받음', p && p.ok && p.job && p.info && p.info.pages > 0, JSON.stringify(p && p.info));
 
 // 2) 변환 (AI 없이 되는 항목만) → 진행 → 완료
-const m = await ask({ type: 'make', job: p.job, options: { large: true, contrast: true, figures: false, easy: false, terms: false, color: false, braille: true } });
+const m = await ask({ type: 'make', job: p.job, options: { large: true, contrast: true, figures: false, easy: false, terms: false, color: false, pdf: false, html: true, braille: true } });
 check('변환 시작', m && m.ok && m.task, JSON.stringify(m));
 let st = null;
 for (let i = 0; i < 60; i++) { st = (await ask({ type: 'task', id: m.task })).status; if (st.status !== 'running') break; await sleep(500); }
@@ -39,6 +39,14 @@ const d = await ask({ type: 'download', files: st.files });
 check('다운로드 요청 2건', d && d.ok && downloads.length === 2 && downloads.every(x => x.url.startsWith(SERVER + '/api/tasks/')), downloads.map(x => x.filename).join(' / '));
 const body = await (await fetch(downloads[0].url)).text();
 check('받은 웹 문서에 고대비·큰 글씨가 적용됨', body.includes('data-theme="hc"') && body.includes('--fs:26px'));
+
+// 3-1) PDF (기본 형식): 받은 파일이 진짜 PDF이고 이름이 .pdf
+const mp = await ask({ type: 'make', job: p.job, options: { large: true, figures: false, color: false } });
+let sp = null;
+for (let i = 0; i < 120; i++) { sp = (await ask({ type: 'task', id: mp.task })).status; if (sp.status !== 'running') break; await sleep(500); }
+const pf = sp && sp.files.find(f => f.kind === 'pdf');
+const head = pf ? new Uint8Array(await (await fetch(SERVER + pf.url)).arrayBuffer()).slice(0, 5) : [];
+check('PDF가 기본 형식으로 만들어짐', sp && sp.status === 'done' && pf && pf.name.endsWith('.pdf') && String.fromCharCode(...head) === '%PDF-' && !sp.files.some(f => f.kind === 'html'), sp && sp.files.map(f => f.name).join(' / ') + (sp && sp.note ? ' · ' + sp.note : ''));
 
 // 4) 오류 처리
 let r = await ask({ type: 'prepare', url: SERVER + '/health', name: '가짜', course: '' });

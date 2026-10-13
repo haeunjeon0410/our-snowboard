@@ -237,7 +237,7 @@ def extract(pdf_path: Path, out_dir: Path, progress=None) -> dict:
         # 표
         table_boxes = []
         try:
-            for t in page.find_tables().tables:
+            for t in (page.find_tables().tables if len(drawings) >= 4 else []):
                 if t.row_count >= 2 and t.col_count >= 2:
                     rows = [[(c or "").replace("\n", " ").strip() for c in r] for r in t.extract()]
                     if sum(1 for r in rows for c in r if c) >= 4:

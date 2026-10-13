@@ -4,3 +4,4 @@ pymupdf
 openai
 numpy
 pillow
+fonttools
