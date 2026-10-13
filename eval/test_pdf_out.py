@@ -95,6 +95,49 @@ o3 = dict(o, figures=False)
 out3 = pymupdf.open("pdf", pdf_out.to_pdf(doc, jobs.job_dir(jid), o3, title="시험"))
 check("10. 그림 설명을 끄면 부록이 붙지 않는다", len(out3) == len(src))
 
+# ── 점자 첨부: PDF 한 파일에서도 .brf를 꺼낼 수 있다 ──
+from server import render  # noqa: E402
+
+o_b = dict(o, braille=True)
+brf_text = render.to_brf(doc, o_b)
+out_b = pymupdf.open("pdf", pdf_out.to_pdf(doc, jobs.job_dir(jid), o_b, title="시험", brf=("시험 (점자).brf", brf_text)))
+check("14. 점자를 고르면 PDF에 .brf가 첨부되고 내용이 똑같다", out_b.embfile_names() == ["braille"] and out_b.embfile_get("braille") == render.brf_bytes(brf_text), f"{len(brf_text.splitlines())}줄")
+check("15. 점자 첨부는 영문 이름(braille.brf)이라 뷰어에서 깨지지 않는다", out_b.embfile_info("braille")["filename"] == "braille.brf")
+check("16. 점자를 끄면 첨부가 없다", out.embfile_names() == [])
+
+# ── 고대비 / 쉬운 한국어·용어 사전 부록 (원본 PDF) ──
+doc_e = copy.deepcopy(doc)
+for pg in doc_e["pages"][2:5]:
+    pg["easy"] = {b["id"]: "쉬운말시험문장" for b in pg["blocks"] if b["type"] == "paragraph"}
+    pg["terms"] = [{"ko": "경쟁", "en": "competition"}]
+o_c = dict(o, contrast=True, easy=True, terms=True)
+out_c = pymupdf.open("pdf", pdf_out.to_pdf(doc_e, jobs.job_dir(jid), o_c, title="시험"))
+
+
+def lum(d, i):
+    pm = d[i].get_pixmap(dpi=30)
+    return float(np.frombuffer(pm.samples, dtype=np.uint8).reshape(pm.height, pm.width, pm.n)[..., :3].mean())
+
+
+check("17. 고대비: 쪽 수·크기가 같고 본문 쪽이 어두워진다(검은 바탕)", same_pages(src, out_c, len(src)) and all(lum(out_c, i) < 0.6 * lum(src, i) for i in (0, 5)),
+      f"밝기 {lum(src, 0):.0f}→{lum(out_c, 0):.0f}")
+check("18. 고대비를 해도 원본 글자를 선택·복사할 수 있다", all(w in norm(out_c[5].get_text()) for w in orig_words))
+toc_c = [t[1] for t in out_c.get_toc()]
+txt_c = norm(" ".join(out_c[i].get_text() for i in range(len(src), len(out_c))))
+check("19. 쉬운 한국어·용어 사전이 맨 끝 부록에 들어간다", "쉬운말시험문장" in txt_c and "competition" in txt_c and "쉬운 한국어" in toc_c and "용어 사전" in toc_c, f"부록 {len(out_c) - len(src)}쪽")
+check("20. 부록도 고대비(검은 바탕)", lum(out_c, len(src)) < 60, f"밝기 {lum(out_c, len(src)):.0f}")
+
+# ── 읽기용 PDF (내용을 다시 흐르게 한 큰 글씨 PDF) ──
+from server import pdf_read  # noqa: E402
+
+o_r = dict(o, readpdf=True, large=True, easy=True, terms=True, color=False)
+rd = pymupdf.open("pdf", pdf_read.to_read_pdf(doc_e, jobs.job_dir(jid), o_r, title="시험"))
+rd_text = norm(" ".join(p.get_text() for p in rd))
+sizes = [sp["size"] for pg in rd[:3] for b in pg.get_text("dict")["blocks"] if b["type"] == 0 for ln in b["lines"] for sp in ln["spans"]]
+check("21. 읽기용 PDF: 큰 글씨(본문 15pt 이상 비중이 높다)", sizes and sum(1 for z in sizes if z >= 15) / len(sizes) > 0.5, f"쪽 {len(rd)}")
+check("22. 읽기용 PDF에 원본 쪽 번호 표시와 쉬운 말이 들어간다", "원본 3쪽" in rd_text and "쉬운말시험문장" in rd_text)
+check("23. 읽기용 PDF에 책갈피가 있다", len(rd.get_toc()) > 0)
+
 # ── 가로 슬라이드(제2장, 960×540) ──
 pdf2 = (ROOT / "samples" / "제2장.pdf").read_bytes()
 jid2 = jobs.create(pdf2, "제2장.pdf", "시험 과목", "시험 자료2")

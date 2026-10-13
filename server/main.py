@@ -165,8 +165,8 @@ def task_file(tid: str, kind: str):
     f = next((f for f in _task(tid)["files"] if f["kind"] == kind), None)
     if not f:
         raise HTTPException(404, "파일이 아직 없습니다")
-    media = {"html": "text/html", "pdf": "application/pdf"}.get(kind, "text/plain")
-    return FileResponse(f["path"], media_type=media if kind == "pdf" else media + "; charset=utf-8", filename=f["name"])
+    media = {"html": "text/html", "pdf": "application/pdf", "readpdf": "application/pdf"}.get(kind, "text/plain")
+    return FileResponse(f["path"], media_type=media if media == "application/pdf" else media + "; charset=utf-8", filename=f["name"])
 
 
 # ───────────── 사용량 / 측정표 ─────────────

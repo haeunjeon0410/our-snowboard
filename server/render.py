@@ -218,6 +218,11 @@ def to_html(doc: dict, job_dir: Path, o: dict, title: str = "") -> str:
             f'<body>{bar}<main>{"".join(parts)}</main><script>{JS}</script></body></html>')
 
 
+def brf_bytes(text: str) -> bytes:
+    """점자 프린터용 BRF는 줄바꿈이 CR+LF가 표준이다. 파일로 받을 때와 PDF에 첨부할 때 같은 바이트가 되게 한곳에서 만든다."""
+    return text.replace("\r\n", "\n").replace("\n", "\r\n").encode("utf-8")
+
+
 def to_brf(doc: dict, o: dict) -> str:
     easy = {str(p["n"]): p["easy"] for p in doc["pages"] if p.get("easy")} if o["easy"] else None
     return outputs.to_braille_text(doc, 32, True, easy, figures=o["figures"])

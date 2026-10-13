@@ -9,7 +9,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from . import color, config, enrich, jobs, llm, pdf_out, render
+from . import color, config, enrich, jobs, llm, pdf_out, pdf_read, render
 from .extract import _needs_spacing
 
 _POOL = ThreadPoolExecutor(max_workers=6)          # 쪽 단위 동시 처리
@@ -18,7 +18,7 @@ TASKS: dict[str, dict] = {}
 
 DEFAULTS = {"large": True, "contrast": False, "figures": True, "easy": False, "terms": False,
             "color": False, "colorType": "deutan", "braille": False,
-            "pdf": True, "html": False,        # 받는 형식: 대부분의 학생은 PDF로 보므로 PDF가 기본
+            "pdf": True, "readpdf": False, "html": False,   # 받는 형식: 원본 PDF(기본) / 읽기용 PDF / 읽기용 웹 문서 / 점자
             "ai": True}   # 'ai'는 start()가 접속 코드를 확인해 정한다 (요청으로 받은 값은 쓰지 않는다)
 TEXT_TYPES = ("paragraph", "heading", "list", "table")
 
@@ -169,10 +169,8 @@ def _clean_options(raw: dict) -> dict:
             o[k] = v if k == "colorType" else bool(v)
     if o["colorType"] not in ("deutan", "tritan"):
         o["colorType"] = "deutan"
-    if not (o["pdf"] or o["html"] or o["braille"]):      # 받는 형식이 하나도 없으면 PDF
+    if not (o["pdf"] or o["readpdf"] or o["html"] or o["braille"]):      # 받는 형식이 하나도 없으면 원본 PDF
         o["pdf"] = True
-    if not o["html"]:                                    # 쉬운 한국어·영어 병기는 웹 문서에만 들어가므로 AI도 부르지 않는다
-        o["easy"] = o["terms"] = False
     return o
 
 
@@ -246,20 +244,26 @@ def _run(job, o, task):
         out_dir.mkdir(parents=True, exist_ok=True)
         title = meta.get("title") or Path(meta["filename"]).stem
         files = []
-        if o["pdf"] and not pdf_out.available():            # 서버에 한글 글꼴이 없으면 PDF 대신 웹 문서로
-            o["pdf"], o["html"] = False, True
+        if (o["pdf"] or o["readpdf"]) and not pdf_out.available():            # 서버에 한글 글꼴이 없으면 PDF 대신 웹 문서로
+            o["pdf"], o["readpdf"], o["html"] = False, False, True
             task["note"] = (task["note"] + " / " if task["note"] else "") + "PDF를 만들 한글 글꼴이 없어 웹 문서로 만들었어요"
+        brf_text = render.to_brf(doc, o) if o["braille"] else None
         if o["pdf"]:
             pdf_path = out_dir / f"{base} (맞춤).pdf"
-            pdf_path.write_bytes(pdf_out.to_pdf(doc, jobs.job_dir(meta["id"]), o, title=title))
+            brf_att = (f"{base} (점자).brf", brf_text) if brf_text else None       # PDF 한 파일에도 점자가 들어 있게
+            pdf_path.write_bytes(pdf_out.to_pdf(doc, jobs.job_dir(meta["id"]), o, title=title, brf=brf_att))
             files.append({"kind": "pdf", "name": pdf_path.name, "path": str(pdf_path)})
+        if o["readpdf"]:
+            rp = out_dir / f"{base} (읽기용).pdf"
+            rp.write_bytes(pdf_read.to_read_pdf(doc, jobs.job_dir(meta["id"]), o, title=title))
+            files.append({"kind": "readpdf", "name": rp.name, "path": str(rp)})
         if o["html"]:
-            html_path = out_dir / f"{base} (맞춤).html"
+            html_path = out_dir / f"{base} (읽기용).html"
             html_path.write_text(render.to_html(doc, jobs.job_dir(meta["id"]), o, title=title), encoding="utf-8")
             files.append({"kind": "html", "name": html_path.name, "path": str(html_path)})
         if o["braille"]:
             brf = out_dir / f"{base} (점자).brf"
-            brf.write_text(render.to_brf(doc, o), encoding="utf-8")
+            brf.write_bytes(render.brf_bytes(brf_text))
             files.append({"kind": "brf", "name": brf.name, "path": str(brf)})
         task["files"] = files
         task["status"] = "done"
