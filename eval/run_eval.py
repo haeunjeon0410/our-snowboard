@@ -1,6 +1,7 @@
 """변환 품질 측정. 실행: python -m eval.run_eval  (샘플은 samples/ 에 둔다, 결과는 output/_eval/results.json)
 측정하지 못하는 것(읽는 순서, 그림 설명의 의미 정확도)은 억지로 숫자를 만들지 않고 '사람 확인 필요'로 남긴다."""
 import json
+import os
 import re
 import sys
 import time
@@ -22,7 +23,10 @@ def load_docs():
     jobs.load_existing()
     docs = {}
     o = dict(ops.DEFAULTS, figures=True)
+    only = [x for x in os.environ.get("OSB_EVAL_ONLY", "").split(",") if x]   # 크레딧을 아끼려고 일부 파일만 잴 때: 파일 이름(확장자 제외)을 쉼표로
     for p in sorted((ROOT / "samples").glob("*.pdf")):                 # 측정 대상: samples/ 의 파일만 (같은 파일이면 이미 처리한 것을 그대로 쓴다)
+        if only and p.stem not in only:
+            continue
         jid = jobs.create(p.read_bytes(), p.name, "", p.stem)
         j = jobs.get(jid)
         todo = [pg for pg in j["doc"]["pages"] if ops._needs_work(pg, o)]
@@ -226,8 +230,10 @@ def main():
     if M.get("fig_total"):
         kpis.append({"label": "그림·도식 설명 생성", "value": f"{M['fig_done']}/{M['fig_total']}", "caption": f"샘플의 그림·도식 {M['fig_total']}개 중 설명을 만든 수 (실패 {M.get('fig_err', 0)}개)", "tone": "ai"})
     if M.get("color"):
-        nm, a, b = min(M["color"], key=lambda x: x[1])
-        kpis.append({"label": "색 구분 (녹색약 기준 ΔE)", "value": f"{a:.1f} → {b:.1f}", "caption": f"{nm}: 가장 헷갈리는 두 색의 색차, 보정 전 → 후 (클수록 구분이 쉬움)", "tone": "primary"})
+        n = len(M["color"])                       # 색이 칠해진 도식이 있는 샘플 전체의 평균 (가장 나쁜 샘플 하나만 보여 주지 않는다)
+        a = sum(x[1] for x in M["color"]) / n
+        b = sum(x[2] for x in M["color"]) / n
+        kpis.append({"label": "색 구분 (녹색약 기준 ΔE)", "value": f"{a:.1f} → {b:.1f}", "caption": f"색 도식이 있는 샘플 {n}개 평균, 가장 헷갈리는 두 색의 색차 보정 전 → 후 (클수록 구분이 쉬움)", "tone": "primary"})
     out = {"when": datetime.now().strftime("%Y-%m-%d %H:%M"), "samples": list(docs.keys()), "kpis": kpis, "sections": secs}
     d = config.DATA_DIR / "_eval"
     d.mkdir(exist_ok=True)

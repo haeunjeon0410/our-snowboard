@@ -111,7 +111,7 @@ def _emph_html(text: str, phrases) -> str:
 
 def _with_terms(html_s: str, terms, used: set) -> str:
     for t in terms or []:
-        if t["ko"] in used:
+        if t["ko"] in used or "we:" + t["ko"] in used:       # 단어 뜻에 이미 영어가 붙었으면 같은 영어를 한 번 더 붙이지 않는다
             continue
         ke = _e(t["ko"])
         i = html_s.find(ke)
@@ -135,6 +135,8 @@ def _with_words(html_s: str, words, used: set) -> str:
         if i < 0 or html_s[i + len(ke):].startswith("("):
             continue
         used.add(key)
+        if w.get("en"):
+            used.add("we:" + w["ko"])
         html_s = html_s[:i + len(ke)] + f'<span class="gl">({_e(w["easy"])}{" · " + _e(w["en"]) if w.get("en") else ""})</span>' + html_s[i + len(ke):]
     return html_s
 

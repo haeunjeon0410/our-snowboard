@@ -204,6 +204,10 @@ try:
 except Exception as ex:
     ok_w = False
 check("25. 모양이 잘못된 단어 풀이 항목이 섞여도 죽지 않는다", ok_w)
+used_t = set()
+html_t = _render._with_terms(_render._with_words("전뇌를 깨워 각성한다", [{"ko": "전뇌", "easy": "앞쪽 뇌", "en": "forebrain"}], used_t),
+                             [{"ko": "전뇌", "en": "forebrain"}, {"ko": "각성", "en": "arousal"}], used_t)
+check("26. 단어 뜻에 영어가 붙은 말에는 영어 용어를 또 붙이지 않는다", html_t.count("forebrain") == 1 and "arousal" in html_t, html_t)
 
 print("\n모두 통과" if not fail else f"\n{fail}개 실패")
 sys.exit(1 if fail else 0)
