@@ -2,7 +2,6 @@
 원본 배치를 바꾸는 방식이라 '원본 PDF'(pdf_out.py)와 따로 고르는 선택 형식이다. 웹 문서(render.py)와 내용·옵션이 같고,
 PDF라서 태블릿·스마트폰·인쇄에 쓰기 쉽다. pymupdf의 Story(HTML+CSS → PDF)를 쓴다."""
 import io
-import os
 import re
 import tempfile
 from pathlib import Path
@@ -41,6 +40,7 @@ p{{margin:4pt 0}} ul{{margin:4pt 0 4pt 14pt}} li{{margin:3pt 0}}
 .meta{{color:{mut};font-size:{base * 0.75}pt;margin:0 0 14pt}}
 .pg{{color:{mut};font-size:{base * 0.7}pt;font-weight:bold;margin:22pt 0 6pt;border-top:1px solid {line};padding-top:6pt}}
 .en{{color:{mut};font-size:{base * 0.85}pt}}
+.gl{{color:{acc};font-size:{base * 0.9}pt;font-weight:bold}}
 .ai{{color:{mut};font-size:{base * 0.6}pt;font-weight:bold}}
 .cap{{background-color:{soft};padding:6pt 9pt;font-size:{base * 0.85}pt;margin:3pt 0 10pt}}
 .leg{{color:{mut};font-size:{base * 0.8}pt}}
@@ -90,24 +90,24 @@ def _html(doc, job_dir: Path, o, title: str, tmp: Path) -> str:
     fixed = render._fix_all(doc, job_dir, o)
     parts = [f"<h1>{e(title or doc.get('title', ''))}</h1>",
              f'<p class="meta">{e((doc.get("course") + " · ") if doc.get("course") else "")}{doc["n_pages"]}쪽</p>']
-    if o["easy"] and any(p.get("easy") for p in doc["pages"]):
-        parts.append('<p class="cap"><span class="ai">AI</span> 어려운 문장을 AI가 쉬운 한국어로 바꿨어요. 원문과 조금 다를 수 있어요.</p>')
+    if o["easy"] and any(p.get("easy_words") for p in doc["pages"]):
+        parts.append('<p class="cap"><span class="ai">AI</span> 어려운 단어 뒤에 쉬운 말과 영어를 괄호로 붙였어요. AI가 고른 풀이라 틀릴 수 있어요.</p>')
+    prev_h = 1                                                       # 문서 제목이 h1이다
     for pg in doc["pages"]:
-        easy = (pg.get("easy") or {}) if o["easy"] else {}
+        words = pg.get("easy_words") if o["easy"] else None
         terms = pg.get("terms") if o["terms"] else None
         used: set = set()
         parts.append(f'<p class="pg">원본 {pg["n"]}쪽</p>')              # 원본 쪽 번호를 그대로 표시해 강의와 맞춰 볼 수 있게
 
         def text_of(obj, key):
-            if key in easy:
-                return _nb(render._with_terms(e(easy[key]), terms, used))
             h = render._emph_html(obj["text"], obj.get("emph")) if obj.get("emph") else e(obj["text"])
-            return _nb(render._with_terms(h, terms, used))
+            return _nb(render._with_terms(render._with_words(h, words, used), terms, used))
 
         for b in pg["blocks"]:
             t = b["type"]
             if t == "heading":
-                lv = min(b.get("level", 2) + 1, 4)
+                lv = min(b.get("level", 2) + 1, 4, prev_h + 1)
+                prev_h = lv
                 parts.append(f"<h{lv}>{text_of(b, b['id'])}</h{lv}>")
             elif t == "paragraph":
                 ocr = ' <span class="ai">[AI]</span>' if "ocr" in (b.get("ai") or []) else ""

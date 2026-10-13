@@ -1,5 +1,5 @@
 """마스코트 원본 4장(흰 배경)에서 화면에 쓸 이미지를 만든다. 실행: python tools/make_mascot_assets.py <원본 폴더>
-원본: 1.webp 컬러 전신, 2.webp·3.webp 선화 전신, 4.webp 선화 머리
+원본: 1.webp 컬러 전신, 2.webp·3.webp 선화 전신, 4.webp 선화 머리, 5 달리기·6 엄지 척·7 넘어짐(png)
 결과: server/static/img/*.png, extension/icons/*.png"""
 import sys
 from pathlib import Path
@@ -119,6 +119,33 @@ def main():
     fit(soften_color(color), max_w=720).save(OUT / "mascot.png", optimize=True)  # 사이트에 쓰는 색
     for n, name in (("2", "mascot-line.png"), ("3", "mascot-line-2.png")):
         fit(trim(line_art(SRC / f"{n}.webp")), max_w=720).save(OUT / name, optimize=True)
+    for n, name in (("5", "mascot-ride.png"), ("6", "mascot-thumb.png"), ("7", "mascot-fall.png"), ("9", "mascot-run.png")):   # 달리는 / 엄지 척 / 넘어진 모습
+        src = next((SRC / f"{n}{e}" for e in (".png", ".webp") if (SRC / f"{n}{e}").exists()), None)
+        if src:
+            fit(soften_color(trim(remove_white_bg(src))), max_w=520).save(OUT / name, optimize=True)
+    spin = SRC / "11.png"      # 360도 스핀 점프 8프레임 (4칸 × 2줄) → 가로로 이어 붙인 한 줄 이미지
+    if spin.exists():
+        sheet = Image.open(spin).convert("RGB")
+        cw, ch = sheet.width // 4, sheet.height // 2
+        frames = []
+        for i in range(8):
+            cell = sheet.crop(((i % 4) * cw, (i // 4) * ch, (i % 4 + 1) * cw, (i // 4 + 1) * ch))
+            tmp = OUT / "_spin_cell.png"
+            cell.save(tmp)
+            frames.append(trim(soften_color(remove_white_bg(tmp)), pad_ratio=0.0))
+            tmp.unlink()
+        W, H = max(f.width for f in frames), max(f.height for f in frames)
+        scale = min(1.0, 150 / W)                                   # 한 칸 폭 150px 안으로
+        W2, H2 = round(W * scale), round(H * scale)
+        strip = Image.new("RGBA", (W2 * 8, H2), (0, 0, 0, 0))
+        for i, f in enumerate(frames):                              # 칸 가운데, 아래(보드 밑)를 맞춘다
+            g = f.resize((max(1, round(f.width * scale)), max(1, round(f.height * scale))), Image.LANCZOS)
+            strip.alpha_composite(g, (i * W2 + (W2 - g.width) // 2, H2 - g.height))
+        strip.save(OUT / "mascot-spin.png", optimize=True)
+        print("spin frame", W2, "x", H2)
+    peek = SRC / "8.png"      # 화면 오른쪽 끝에서 머리만 내민 모습 (오른쪽이 잘린 채로 둔다)
+    if peek.exists():
+        fit(soften_color(trim(remove_white_bg(peek), pad_ratio=0.0)), max_h=420).save(OUT / "mascot-peek.png", optimize=True)
     head = trim(line_art(SRC / "4.webp", color=PRIMARY, boost=1.25), pad_ratio=0.02)
     fit(head, max_w=600).save(OUT / "mascot-head.png", optimize=True)
     EXT.mkdir(parents=True, exist_ok=True)

@@ -8,7 +8,6 @@ import pymupdf
 BULLET_RE = re.compile(r"^\s*([•▪■●○◦·\-–—*▶▷◆◇※]|\d{1,2}[.)]|[가-하][.)]|\(\d{1,2}\))\s*")
 SENT_END_RE = re.compile(r"[.!?。…]$|[다요임음함됨]\.?$")
 MONO_RE = re.compile(r"mono|consol|courier|menlo|code|d2coding", re.I)
-LETTERSPACED_RE = re.compile(r"^(?:[A-Za-z0-9&·\-–—]{1,3} )+[A-Za-z0-9&·\-–—]{1,3}$")
 HANGUL_RE = re.compile(r"[가-힣]")
 PAGE_SCALE_WIDTH = 1500  # 원본 쪽 이미지 가로 픽셀
 
@@ -192,8 +191,20 @@ def render_page_png(pdf_path: Path, out_png: Path, page_no: int) -> Path:
         with pymupdf.open(str(pdf_path)) as pdf:
             page = pdf[page_no - 1]
             sc = PAGE_SCALE_WIDTH / page.rect.width
-            page.get_pixmap(matrix=pymupdf.Matrix(sc, sc)).save(str(out_png))
+            _save_png(page.get_pixmap(matrix=pymupdf.Matrix(sc, sc)), out_png)
     return Path(out_png)
+
+
+def _save_png(pix, path):
+    """pymupdf 기본 PNG 저장은 압축이 무거워 그림이 많은 자료에서 가장 오래 걸린다. 가볍게 압축해 3~5배 빠르게 저장한다."""
+    try:
+        if pix.n == 3 and not pix.alpha:
+            from PIL import Image
+            Image.frombytes("RGB", (pix.width, pix.height), pix.samples).save(str(path), "PNG", compress_level=1)
+            return
+    except Exception:
+        pass
+    pix.save(str(path))
 
 
 def extract(pdf_path: Path, out_dir: Path, progress=None) -> dict:
@@ -263,7 +274,7 @@ def extract(pdf_path: Path, out_dir: Path, progress=None) -> dict:
             clip = pymupdf.Rect(bb)
             sc = min(2.2, 1400 / max(clip.width, 1))
             fname = f"p{pn + 1}_f{fi + 1}.png"
-            page.get_pixmap(matrix=pymupdf.Matrix(sc, sc), clip=clip).save(str(out_dir / "figs" / fname))
+            _save_png(page.get_pixmap(matrix=pymupdf.Matrix(sc, sc), clip=clip), out_dir / "figs" / fname)
             inner = [l for l in lines if _center_in(l["bbox"], bb)]
             items.append({"kind": "figure", "bbox": tuple(bb), "img": f"figs/{fname}", "fig_kind": fkind,
                           "fullpage": fullpage, "inner": inner})

@@ -67,11 +67,11 @@ def describe_figure(png_bytes: bytes, fig_kind: str, context: str, fullpage: boo
 
 
 # ───────────── 쉬운 한국어 / 영어 병기 ─────────────
-EASY_PROMPT = """다음은 대학 강의 자료의 문장들이다. 한국어가 서툰 외국인 학생과 일반 학생이 모두 이해하도록 쉬운 한국어로 바꿔라.
-- 뜻을 바꾸거나 새 내용을 더하지 마라.
-- 전문 용어는 그대로 쓰되, 처음 나올 때 괄호로 짧게 풀이한다. (예: 신경관(뇌와 척수가 될 관))
-- 한 문장은 40자 안팎으로 짧게 나누고, '~입니다/합니다' 체로 쓴다.
-- 입력과 같은 개수의 JSON 문자열 배열 하나만 출력한다.
+EASYWORD_PROMPT = """다음은 대학 강의 자료의 문장들이다. 한국어가 서툰 교환학생(외국인 학생)이 막히는 어려운 단어를 골라, 단어 바로 뒤에 괄호로 붙일 쉬운 우리말 풀이와 영어 뜻을 적어라.
+- 한자어·문어체·학술적인 단어만 골라라. 일상에서 흔한 쉬운 단어(예: 기존, 비용, 방식)은 제외한다. (예: 용이하다 → 쉽다 / easy, 상이하다 → 다르다 / different, 점진적 → 조금씩 / gradual)
+- easy: 5글자 안팎의 짧은 쉬운 우리말 하나. en: 짧은 영어 단어나 구(소문자, 3단어 이내). 뜻이 바뀌면 안 된다.
+- 단어(ko)은 문장에 나온 그대로의 표기여야 한다. 전문 용어(예: 신경관)는 제외한다.
+- 많아야 12개. JSON 배열 하나만 출력: [{{"ko": "용이하다", "easy": "쉽다", "en": "easy"}}]
 
 입력:
 {payload}"""
@@ -85,21 +85,22 @@ TERMS_PROMPT = """다음 한국어 강의 문장들에서 영어를 함께 적�
 {payload}"""
 
 
-def easy_korean(texts: list[str]) -> list[str] | None:
-    """바꾼 글 목록. 한 묶음이라도 AI가 실패하면 None (일부만 바뀐 채로 완료 처리되지 않게)."""
-    out = list(texts)
-    for start in range(0, len(texts), 10):
-        chunk = texts[start:start + 10]
-        try:
-            res = llm.chat_json(EASY_PROMPT.format(payload=json.dumps(chunk, ensure_ascii=False)), max_tokens=3000)
-        except Exception:
-            return None
-        if not isinstance(res, list) or len(res) != len(chunk):
-            return None
-        for i, b in enumerate(res):
-            if isinstance(b, str) and b.strip():
-                out[start + i] = b.strip()
-    return out
+def easy_words(texts: list[str]) -> list[dict] | None:
+    """어려운 단어와 쉬운 말 목록. AI가 실패하면 None (빈 목록 []은 '붙일 단어가 없음'이라는 정상 결과)."""
+    try:
+        res = llm.chat_json(EASYWORD_PROMPT.format(payload=json.dumps(texts, ensure_ascii=False)), max_tokens=1500)
+    except Exception:
+        return None
+    joined = " ".join(texts)
+    out, seen = [], set()
+    for r in res if isinstance(res, list) else []:
+        if not (isinstance(r, dict) and r.get("ko") and r.get("easy")):
+            continue
+        ko, easy, en = str(r["ko"]).strip(), str(r["easy"]).strip(), str(r.get("en") or "").strip()
+        if ko in joined and ko not in seen and 0 < len(easy) <= 14 and easy != ko:
+            seen.add(ko)
+            out.append({"ko": ko, "easy": easy, "en": en[:30]})
+    return out[:12]
 
 
 def english_terms(texts: list[str]) -> list[dict] | None:

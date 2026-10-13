@@ -1,12 +1,12 @@
 """원본 PDF에 접근성을 '더해서' 내보낸다 (.pdf). 쪽 수·쪽 방향·크기·글자와 그림의 위치는 원본 그대로다.
-강의에서 "8슬라이드 보세요"라고 하면 결과물의 8쪽이 그 쪽이고, 그 위에 필기할 수도 있다.
+원본 쪽의 모습은 그대로이고, 그 위에 필기할 수도 있다.
 
 더하는 것 (모두 눈에 보이는 모습은 바꾸지 않는다):
 - 그림 자리에 보이지 않는 글자(그림 설명·그림 속 글자)  → 스크린리더·읽어 주기가 읽는다
 - 스캔된 쪽에 보이지 않는 글자층(AI가 읽은 글자)
 - 색 구분: 색으로만 구분된 그림을 같은 자리에서 보정본(+무늬)으로 바꾼다
 - 고대비: 쪽 위에 색 반전 막을 씌운다(글자는 그대로 글자). 사진처럼 반전하면 필름처럼 보이는 그림은 제외
-- 제목 책갈피, 문서 제목·언어, 파일 끝의 접근성 부록(그림 설명 · 쉬운 한국어 · 용어 사전. 원본 쪽 번호는 밀리지 않는다)
+- 제목 책갈피, 문서 제목·언어, 설명이 필요한 쪽 바로 뒤에 끼워 넣는 보충 쪽(그림 설명 · 쉬운 한국어 · 영어 용어). 쪽 번호가 밀리는 대신 필요한 곳에서 바로 읽힌다
 
 원본의 글자는 그대로 둔다. 글자를 그림으로 바꾸면 확대할 때 뭉개지고 복사도 안 되기 때문이다.
 띄어쓰기 복원은 웹 문서·점자에 적용된다."""
@@ -87,23 +87,13 @@ def _hidden(page, rect, text: str, fontfile: str):
             return
 
 
-# ───────────── 부록 (그림 설명 · 쉬운 한국어 · 용어 사전) ─────────────
-def _orig_texts(pg) -> dict:
-    """블록 id → 글 (쉬운 한국어 부록에서 원문을 같이 보여 주려고)"""
-    out = {}
-    for b in pg["blocks"]:
-        if b["type"] in ("paragraph", "heading"):
-            out[b["id"]] = b["text"]
-        elif b["type"] == "list":
-            for i, it in enumerate(b["items"]):
-                out[f"{b['id']}:{i}"] = it["text"]
-    return out
-
-
-def _section_figures(doc) -> str:
+# ───────────── 보충 쪽 (그림 설명 · 쉬운 한국어 · 영어 용어) ─────────────
+# 맨 뒤에 모아 두면 아무도 찾아가 보지 않으므로, 설명이 필요한 쪽 바로 뒤에 한 쪽씩 끼워 넣는다 (쪽 번호는 그만큼 밀린다).
+def _page_parts(pg, o) -> str:
+    """이 쪽에 더할 내용 (HTML). 없으면 빈 글."""
     e = render._e
-    items = []
-    for pg in doc["pages"]:
+    parts = []
+    if o["figures"]:
         rows = []
         for k, b in enumerate(_figures(pg), 1):
             if b.get("fullpage") and pg.get("ocr_done"):
@@ -118,78 +108,61 @@ def _section_figures(doc) -> str:
                 row += f"<br><span class=\"sub\">그림 속 글자: {e(', '.join(inner))}</span>"
             rows.append(row + "</p>")
         if rows:
-            items.append(f"<h3>{pg['n']}쪽</h3>" + "".join(rows))
-    if not items:
-        return ""
-    return ("<h2>그림 설명</h2><p class=\"sub\">원본의 각 쪽에 있는 그림을 글로 설명한 목록이에요. AI가 쓴 설명이라 틀릴 수 있어요.</p>" + "".join(items))
+            parts.append("<h2>그림 설명</h2>" + "".join(rows))
+    if o["easy"] and pg.get("easy_words"):
+        parts.append("<h2>단어 뜻</h2>" + "".join(f"<p><b>{e(w['ko'])}</b> ({e(w['easy'])}{' · ' + e(w['en']) if w.get('en') else ''})</p>" for w in pg["easy_words"]))
+    if o["terms"] and pg.get("terms"):
+        parts.append("<h2>영어 용어</h2>" + "".join(f"<p><b>{e(t['ko'])}</b> ({e(t['en'])})</p>" for t in pg["terms"]))
+    return "".join(parts)
 
 
-def _section_easy(doc) -> str:
-    e = render._e
-    items = []
-    for pg in doc["pages"]:
-        easy = pg.get("easy") or {}
-        if not easy:
-            continue
-        orig = _orig_texts(pg)
-        rows = [f"<p><span class=\"sub\">{e(orig.get(k, '')[:90])}</span><br><b>→</b> {e(v)}</p>" for k, v in easy.items() if v]
-        if rows:
-            items.append(f"<h3>{pg['n']}쪽</h3>" + "".join(rows))
-    if not items:
-        return ""
-    return ("<h2>쉬운 한국어</h2><p class=\"sub\">어려운 문장을 AI가 쉬운 말로 바꾼 목록이에요. 원문과 조금 다를 수 있어요. 위의 작은 글씨가 원문이에요.</p>" + "".join(items))
-
-
-def _section_terms(doc) -> str:
-    e = render._e
-    seen = {}
-    for pg in doc["pages"]:
-        for t in pg.get("terms") or []:
-            seen.setdefault(t["ko"], {"en": t["en"], "pages": []})["pages"].append(pg["n"])
-    if not seen:
-        return ""
-    rows = []
-    for ko, v in sorted(seen.items(), key=lambda kv: (kv[1]["pages"][0], kv[0])):
-        pages = ", ".join(f"{n}쪽" for n in dict.fromkeys(v["pages"][:5]))
-        rows.append(f"<p><b>{e(ko)}</b> ({e(v['en'])}) <span class=\"sub\">· {pages}</span></p>")
-    return "<h2>용어 사전</h2><p class=\"sub\">전문 용어의 영어 표기예요. 뒤의 숫자는 그 용어가 나오는 원본 쪽이에요.</p>" + "".join(rows)
-
-
-def _appendix(doc, fonts, size, o) -> tuple[bytes, list] | None:
-    """(PDF 바이트, 제목 목록[(단계, 글, 부록 안의 쪽)]). 넣을 내용이 없으면 None."""
-    parts = []
-    if o["figures"]:
-        parts.append(_section_figures(doc))
-    if o["easy"]:
-        parts.append(_section_easy(doc))
-    if o["terms"]:
-        parts.append(_section_terms(doc))
-    parts = [p for p in parts if p]
-    if not parts:
+def _companions(doc, fonts, size, o) -> tuple[bytes, dict] | None:
+    """보충 쪽을 한꺼번에 만든다 (쪽마다 따로 만들면 글꼴이 쪽마다 중복으로 들어가 느리고 커진다).
+    반환: (PDF 바이트, {원본 쪽 번호: (시작, 끝)} — 이 PDF 안의 쪽 번호, 0부터). 더할 내용이 없으면 None."""
+    sections = [(pg["n"], _page_parts(pg, o)) for pg in doc["pages"]]
+    sections = [(n, body) for n, body in sections if body]
+    if not sections:
         return None
     hc = o["contrast"]
     fg, mut, line = ("#ffe600", "#ffffff", "#ffffff") if hc else ("#1c2230", "#5a6b88", "#c9d1de")
-    html = ("<h1>접근성 부록</h1><p class=\"sub\">원본의 쪽 번호는 그대로이고, 이 부록은 맨 끝에 붙어 있어요.</p>" + "".join(parts))
     css = f"""@font-face{{font-family:K;src:url({fonts[1]})}}
 @font-face{{font-family:K;font-weight:bold;src:url({fonts[2]})}}
 body{{font-family:K;font-size:13pt;line-height:1.7;color:{fg}}}
-h1{{font-size:22pt;margin:0 0 6pt}}
-h2{{font-size:19pt;margin:18pt 0 6pt}} h3{{font-size:14pt;margin:14pt 0 2pt;border-top:1px solid {line};padding-top:6pt}}
+h1{{font-size:20pt;margin:0 0 6pt}}
+h2{{font-size:15pt;margin:14pt 0 2pt;border-top:1px solid {line};padding-top:6pt}}
 p{{margin:3pt 0}} .sub{{color:{mut};font-size:11.5pt}}"""
-    story = pymupdf.Story(html=html, user_css=css, archive=pymupdf.Archive(fonts[0]))
-    heads = []
-
-    def positionfn(pos):
-        if pos.heading and pos.heading <= 2 and pos.text:
-            heads.append((pos.heading, re.sub(r"\s+", " ", pos.text).strip()[:60], pos.page_num))
-
+    arch = pymupdf.Archive()                           # 글꼴 파일 둘만 넣는다 (폴더 전체를 훑지 않는다)
+    for name in dict.fromkeys(fonts[1:]):
+        arch.add((Path(fonts[0]) / name).read_bytes(), name)
     buf = io.BytesIO()
     w = pymupdf.DocumentWriter(buf)
     media = pymupdf.Rect(0, 0, size[0], size[1])
     where = media + (42, 42, -42, -42)
-    story.write(w, lambda n, f: (media, where, None), positionfn=positionfn)
+    ranges, total = {}, 0
+    for n, body in sections:                           # 구역마다 새 쪽에서 시작한다 (Story의 page-break는 멈추는 경우가 있어 쓰지 않는다)
+        html = f'<h1>{n}쪽 보충 설명</h1><p class="sub">앞 쪽 바로 뒤에 넣은 쪽이에요. AI가 쓴 내용이라 틀릴 수 있어요.</p>{body}'
+        calls = [0]
+
+        def rectfn(num, filled):
+            calls[0] += 1
+            return media, where, None
+        pymupdf.Story(html=html, user_css=css, archive=arch).write(w, rectfn)
+        ranges[n] = (total, total + calls[0] - 1)
+        total += calls[0]
     w.close()
-    return buf.getvalue(), heads
+    sub = pymupdf.open("pdf", buf.getvalue())
+    ink = (1, 0.9, 0) if hc else (0.35, 0.42, 0.53)
+    fontfile = os.path.join(fonts[0], fonts[1])
+    for n, (a, z) in ranges.items():                   # 아래에 "N쪽 보충 설명 (k/m)": 어느 쪽의 보충인지, 이어지는지 알 수 있게
+        for k, idx in enumerate(range(a, z + 1)):
+            pgx = sub[idx]
+            if hc:                                     # 검은 바탕 + 밝은 글씨
+                pgx.draw_rect(pgx.rect, color=None, fill=(0, 0, 0), overlay=False)
+            pgx.insert_text((42, pgx.rect.height - 22), f"{n}쪽 보충 설명 ({k + 1}/{z - a + 1})", fontname=FONT,
+                            fontfile=fontfile, fontsize=9, color=ink)
+    data = sub.tobytes(garbage=3, deflate=True)
+    sub.close()
+    return data, ranges
 
 
 # ───────────── 고대비 (쪽 위에 색 반전 막) ─────────────
@@ -299,18 +272,24 @@ def to_pdf(doc: dict, job_dir: Path, o: dict, title: str = "", brf: tuple | None
                     toc.append([lv, re.sub(r"\s+", " ", b["text"]).strip()[:80], pg["n"]])
                     prev = lv
 
-    # 5) 맨 끝 접근성 부록 (원본 쪽 번호는 그대로): 그림 설명 · 쉬운 한국어 · 용어 사전
+    # 5) 보충 쪽: 그림 설명 · 쉬운 한국어 · 영어 용어를, 필요한 쪽 바로 뒤에 한 쪽씩 끼워 넣는다 (뒤쪽 쪽 번호는 그만큼 밀린다)
+    inserted = {}                                       # 원본 쪽 번호 → 그 뒤에 넣은 쪽 수
     if len(out):
         first = out[0].rect
-        res = _appendix(doc, fonts, (first.width, first.height), o)
+        res = _companions(doc, fonts, (first.width, first.height), o)
         if res:
-            app, heads = res
-            n_before = len(out)
-            out.insert_pdf(pymupdf.open("pdf", app))
-            if o["contrast"]:                              # 부록도 검은 바탕 + 밝은 글씨
-                for k in range(n_before, len(out)):
-                    out[k].draw_rect(out[k].rect, color=None, fill=(0, 0, 0), overlay=False)
-            toc = toc + [[1 if lv == 1 else 2, text, n_before + pn] for lv, text, pn in heads]
+            sub = pymupdf.open("pdf", res[0])
+            for n in sorted(res[1], reverse=True):      # 뒤에서부터 넣어야 앞쪽 위치가 안 바뀐다
+                if n - 1 >= len(out):
+                    continue
+                a, z = res[1][n]
+                out.insert_pdf(sub, from_page=a, to_page=z, start_at=n)
+                inserted[n] = z - a + 1
+            sub.close()
+    if inserted:
+        def shifted(pn):                                # 원본 pn쪽이 지금은 몇 쪽인지
+            return pn + sum(c for q, c in inserted.items() if q < pn)
+        toc = [[lv, text, shifted(pn)] for lv, text, pn in toc]
     if toc:
         try:
             out.set_toc(toc)

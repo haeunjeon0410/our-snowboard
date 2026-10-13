@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import config, jobs, llm, ops
+from . import config, convert_office, jobs, llm, ops
 
 app = FastAPI(title="Our Snowboard")
 
@@ -66,6 +66,7 @@ if not config.PUBLIC:
 @app.on_event("startup")
 def _startup():
     jobs.load_existing()
+    jobs.prune_outputs()                              # 오래된 변환 결과 파일 정리
     jobs.start_cleanup_loop(config.DATA_TTL_HOURS, also=lambda: ops.prune_tasks(config.DATA_TTL_HOURS * 3600))
 
 
@@ -111,19 +112,56 @@ def extension_zip():
 
 
 # ───────────── 변환 ─────────────
+MAX_UPLOAD = 60 * 1024 * 1024
+MAX_PAGES = 400
+
+
+def _pdf_problem(data: bytes) -> str:
+    """변환할 수 없는 PDF면 이유를 짧은 한국어로, 괜찮으면 빈 글."""
+    import pymupdf
+    try:
+        with pymupdf.open(stream=data, filetype="pdf") as d:
+            if d.needs_pass:
+                return "암호가 걸린 PDF는 변환할 수 없어요"
+            if d.page_count == 0:
+                return "쪽이 없는 PDF예요"
+            if d.page_count > MAX_PAGES:
+                return f"쪽이 너무 많아요 ({d.page_count}쪽). {MAX_PAGES}쪽까지 변환할 수 있어요"
+    except Exception:
+        return "PDF를 열 수 없어요. 파일이 손상되었을 수 있어요"
+    return ""
+
+
 @app.post("/api/prepare")
-async def prepare(request: Request, filename: str = "lecture.pdf", course: str = "", title: str = ""):
+async def prepare(request: Request, filename: str = "lecture.pdf", course: str = "", title: str = "", light: int = 0):
     """PDF를 받아 글자를 뽑아 두고(AI 없음), 패널에 보여 줄 자료 요약을 돌려준다."""
     ai_ok = ai_allowed(request)
-    body = await request.body()
-    if body[:5] != b"%PDF-":
-        raise HTTPException(400, "PDF 파일이 아닙니다")
-    if len(body) > 60 * 1024 * 1024:
+    try:
+        declared = int(request.headers.get("content-length") or 0)
+    except ValueError:
+        declared = 0
+    if declared > MAX_UPLOAD:                          # 다 받기 전에 먼저 거절한다 (메모리를 아낀다)
         raise HTTPException(413, "파일이 너무 큽니다 (60MB 초과)")
+    body = await request.body()
+    kind = convert_office.kind(body[:16], filename)
+    if not kind:
+        raise HTTPException(400, "PDF나 PowerPoint 파일이 아닙니다")
+    if len(body) > MAX_UPLOAD:
+        raise HTTPException(413, "파일이 너무 큽니다 (60MB 초과)")
+    if kind != "pdf":                          # PowerPoint → PDF로 바꾼 뒤에는 PDF와 똑같이 처리한다
+        try:
+            body = await run_in_threadpool(convert_office.to_pdf, body, "." + (filename.rsplit(".", 1)[-1].lower() if "." in filename else "pptx"))
+        except convert_office.Unsupported as e:
+            raise HTTPException(422, str(e))
+        filename = (filename.rsplit(".", 1)[0] if "." in filename else filename) + ".pdf"
+
+    problem = _pdf_problem(body)
+    if problem:
+        raise HTTPException(400, problem)
 
     def work():
         jid = jobs.create(body, filename, course[:80], title[:120])
-        return jid, ops.analyze(jobs.get(jid), ai_ok)
+        return jid, ops.analyze(jobs.get(jid), ai_ok, light=bool(light))
     jid, info = await run_in_threadpool(work)
     return {"job": jid, "info": info}
 
@@ -151,7 +189,8 @@ def _task(tid: str):
 def task_status(tid: str):
     t = _task(tid)
     return {"status": t["status"], "done": t["done"], "total": t["total"], "step": t["step"], "error": t["error"], "note": t["note"],
-            "files": [{"kind": f["kind"], "name": f["name"], "url": f"/api/tasks/{tid}/file/{f['kind']}"} for f in t["files"]]}
+            "files": [{"kind": f["kind"], "name": f["name"], "url": f"/api/tasks/{tid}/file/{f['kind']}"} for f in t["files"]],
+            "summary": t.get("summary", []), "compare": t.get("compare")}
 
 
 @app.post("/api/tasks/{tid}/cancel")

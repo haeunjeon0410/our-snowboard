@@ -8,9 +8,9 @@
     return r.json();
   };
   const handlers = {
-    async prepare({ url, name, course }) {
+    async prepare({ url, name, course, light }) {
       const blob = await (await fetch(url)).blob();
-      const r = await fetch(`/api/prepare?filename=${encodeURIComponent(name + '.pdf')}&course=${encodeURIComponent(course || '')}&title=${encodeURIComponent([course, name].filter(Boolean).join(' · '))}`, { method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: blob });
+      const r = await fetch(`/api/prepare?filename=${encodeURIComponent(name + '.pdf')}&course=${encodeURIComponent(course || '')}&title=${encodeURIComponent([course, name].filter(Boolean).join(' · '))}${light ? '&light=1' : ''}`, { method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: blob });
       if (!r.ok) throw new Error((await r.json()).detail || '자료를 확인하지 못했어요');
       return { ok: true, ...(await r.json()) };
     },

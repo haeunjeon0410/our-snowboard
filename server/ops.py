@@ -72,10 +72,15 @@ def _color_count(job, b) -> int:
     return b["colors"]
 
 
-def analyze(job, ai_ok: bool | None = None) -> dict:
+def analyze(job, ai_ok: bool | None = None, light: bool = False) -> dict:
     """패널에 보여 줄 자료 요약. 해당 없는 항목은 패널에서 숨기거나 끄는 데 쓴다."""
     doc = job["doc"]
     figs = [b for pg in doc["pages"] for b in _figures(pg)]
+    if light:        # 바로 변환할 때는 항목 표시용 색 도식 수를 세지 않는다 (기다리는 시간 단축)
+        return {"pages": doc["n_pages"], "figures": len(figs), "colorFigures": None,
+                "scanned": sum(1 for pg in doc["pages"] if _scanned(pg)),
+                "ai": llm.available() if ai_ok is None else ai_ok,
+                "codeRequired": bool(config.ACCESS_CODE) and llm.available() and not ai_ok}
     changed = any("colors" not in b for b in figs)
     todo = [b for b in figs if "colors" not in b]
     if len(todo) > 4:
@@ -97,14 +102,18 @@ def _needs_work(pg, o) -> bool:
         return True
     if o["figures"] and any(not b.get("ai_desc") and not b.get("fullpage") for b in _figures(pg)):
         return True
-    if o["easy"] and pg.get("easy") is None and _texts(pg):
+    if o["easy"] and pg.get("easy_words") is None and _texts(pg):
         return True
     if o["terms"] and pg.get("terms") is None and _texts(pg):
         return True
     return False
 
 
-def _work_page(job, pg, o) -> bool:
+MIN_TEXT_FOR_AI = 25          # 한 쪽의 글이 이보다 짧으면 단어 뜻·영어 용어는 AI 없이 건너뛴다
+MAX_AI_FIGURES = 150          # 한 번의 변환에서 AI가 설명할 그림의 상한 (아주 큰 자료 하나가 크레딧을 한꺼번에 쓰지 않게)
+
+
+def _work_page(job, pg, o, budget: dict | None = None) -> bool:
     """쪽 하나를 처리한다. AI 호출이 하나라도 실패하면 True (그 부분은 완료로 기록하지 않아 다음에 다시 시도된다)."""
     failed = False
     ai = o["ai"]
@@ -132,6 +141,13 @@ def _work_page(job, pg, o) -> bool:
     scanned = _scanned(pg)
     if o["figures"] or scanned:
         todo = [b for b in _figures(pg) if not b.get("ai_desc") and not (b.get("fullpage") and not scanned)]
+        if budget is not None and todo:                     # 남은 그림 수만큼만 설명한다
+            with budget["lock"]:
+                take = max(0, min(len(todo), budget["figs"]))
+                budget["figs"] -= take
+                if take < len(todo):
+                    budget["cut"] = True
+            todo = todo[:take]
         results = list(_FIG_POOL.map(lambda b: enrich.describe_figure((d / b["img"]).read_bytes(), b.get("fig_kind", "image"), ctx, b.get("fullpage", False)), todo))
         for b, r in zip(todo, results):
             if "error" in r:
@@ -146,12 +162,17 @@ def _work_page(job, pg, o) -> bool:
             pg["ocr_done"] = True
     # 3) 쉬운 한국어 / 영어 병기
     items = _texts(pg)
-    if o["easy"] and pg.get("easy") is None and items:
-        res = enrich.easy_korean([t for _, t in items])
+    if items and sum(len(t) for _, t in items) < MIN_TEXT_FOR_AI:        # 제목만 있는 쪽 등은 풀이할 것이 없으니 AI를 부르지 않는다 (크레딧 절약)
+        for key, want in (("easy_words", o["easy"]), ("terms", o["terms"])):
+            if want and pg.get(key) is None:
+                pg[key] = []
+        items = []
+    if o["easy"] and pg.get("easy_words") is None and items:
+        res = enrich.easy_words([t for _, t in items])
         if res is None:
             failed = True
         else:
-            pg["easy"] = {i: r for (i, t), r in zip(items, res) if r != t}
+            pg["easy_words"] = res
     if o["terms"] and pg.get("terms") is None and items:
         res = enrich.english_terms([t for _, t in items])
         if res is None:
@@ -192,6 +213,147 @@ def prune_tasks(max_age_s: float) -> int:
     return len(old)
 
 
+def _ensure_colors(job, o):
+    """'바로 변환'에서는 색 도식 수를 세지 않으므로, 요약·비교가 그 값을 쓰기 전에 빠진 것만 채운다 (색 구분을 골랐을 때만)."""
+    if not o["color"]:
+        return
+    todo = [b for pg in job["doc"]["pages"] for b in _figures(pg) if "colors" not in b]
+    if todo:
+        list(_FIG_POOL.map(lambda b: _color_count(job, b), todo))
+        jobs.save(job)
+
+
+def _summary(job, o) -> list[str]:
+    """이번 변환에서 사용자가 고른 항목의 결과만 짧게 (센 값만 쓴다). 고르지 않은 일은 적지 않고, 원본 PDF의 글자에 적용되지 않는 일도 적지 않는다."""
+    doc = job["doc"]
+    reflow = o["html"] or o["readpdf"] or o["braille"]
+    figs = [b for pg in doc["pages"] for b in _figures(pg) if b.get("ai_desc") and not b.get("fullpage")]
+    restored = sum(1 for pg in doc["pages"] for b in pg["blocks"] if b["type"] in ("paragraph", "heading") and b.get("raw_text") and b["raw_text"] != b["text"])
+    ocr = sum(1 for pg in doc["pages"] if pg.get("ocr_done"))
+    easy = sum(len(pg.get("easy_words") or []) for pg in doc["pages"])
+    terms = sum(len(pg.get("terms") or []) for pg in doc["pages"])
+    colored = sum(1 for pg in doc["pages"] for b in _figures(pg) if b.get("colors", 0) >= 2)
+    nfig = sum(len(_figures(pg)) for pg in doc["pages"])
+    out = []
+    if restored and reflow:
+        out.append(f"사라진 띄어쓰기를 {restored}개 문단에서 바로잡았어요")
+    if ocr:
+        out.append(f"스캔된 {ocr}쪽의 글자를 읽어 냈어요")
+    if o["figures"]:
+        out.append(f"그림 {len(figs)}개에 설명을 붙였어요" if figs else ("설명을 붙일 그림이 없었어요" if not nfig else "그림 설명은 AI를 쓸 수 없어 건너뛰었어요"))
+    if o["color"]:
+        out.append(f"색으로 칠한 도식 {colored}개를 구분하기 쉽게 바꿨어요" if colored else "색으로 구분된 도식이 없어서 바꾼 곳은 없어요")
+    if o["easy"]:
+        out.append(f"어려운 단어 {easy}개에 쉬운 말과 영어를 붙였어요" if easy else "풀이를 붙일 어려운 단어가 없었어요")
+    if o["terms"]:
+        out.append(f"전문 용어 {terms}개에 영어를 붙였어요" if terms else "영어를 붙일 전문 용어가 없었어요")
+    if o["braille"]:
+        out.append(f"{doc['n_pages']}쪽을 한글 점자로 옮겼어요")
+    if o["contrast"]:
+        out.append("검정 바탕의 고대비로 바꿨어요")
+    if o["large"] and (o["html"] or o["readpdf"]):
+        out.append("큰 글씨로 다시 정리했어요")
+    if not out:
+        out.append("고른 항목이 없어서 원본 그대로 받았어요")
+    return out[:7]
+
+
+def _compares(job, o) -> list[dict]:
+    """고른 항목마다 원본과 달라진 대표 장면 하나씩 (실제 변환 결과에서 뽑는다)."""
+    import base64
+    import io
+    from . import braille_ko as B
+    doc = job["doc"]
+    d = jobs.job_dir(job["meta"]["id"])
+    out = []
+
+    def thumb(img, size=(220, 150)):
+        im = img.convert("RGB")
+        im.thumbnail(size)
+        buf = io.BytesIO()
+        im.save(buf, "JPEG", quality=74)
+        return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+
+    def sample():
+        for pg in doc["pages"]:
+            for b in pg["blocks"]:
+                if b["type"] == "paragraph" and 24 <= len(b["text"]) <= 160:
+                    return pg["n"], b["text"]
+        for pg in doc["pages"]:                                        # 짧은 슬라이드 문장도 허용
+            for b in pg["blocks"]:
+                if b["type"] in ("paragraph", "heading") and 10 <= len(b["text"]) <= 160:
+                    return pg["n"], b["text"]
+        return None, ""
+
+    def add(label, **kw):
+        out.append({"label": label, **kw})
+
+    reflow = o["html"] or o["readpdf"] or o["braille"]
+    try:
+        if o["figures"]:                                            # 그림 → 그림 설명
+            for pg in doc["pages"]:
+                for b in _figures(pg):
+                    desc = (b.get("ai_desc") or {}).get("desc")
+                    if desc and not b.get("fullpage"):
+                        add("그림 설명", page=pg["n"], beforeImg=thumb(Image.open(d / b["img"])), after=desc[:130])
+                        raise StopIteration
+    except StopIteration:
+        pass
+    try:
+        if o["color"]:                                              # 색 도식 → 보정·무늬
+            for pg in doc["pages"]:
+                for b in _figures(pg):
+                    if b.get("colors", 0) >= 2:
+                        res = render._fix_all(doc, d, o).get(b["id"])         # 파일을 만들 때 계산해 둔 보정본을 쓴다
+                        if res and res[1]:
+                            add("색 구분", page=pg["n"], beforeImg=thumb(Image.open(d / b["img"])), afterImg=thumb(res[0]))
+                            raise StopIteration
+    except StopIteration:
+        pass
+    except Exception:
+        traceback.print_exc()
+    if reflow:                                                      # 붙은 글자 → 띄어쓰기
+        for pg in doc["pages"]:
+            hit = next((b for b in pg["blocks"] if b["type"] in ("paragraph", "heading") and b.get("raw_text") and b["raw_text"] != b["text"] and len(b["text"]) >= 14), None)
+            if hit:
+                add("띄어쓰기", page=pg["n"], before=hit["raw_text"][:70], after=hit["text"][:70])
+                break
+    if o["easy"]:                                                   # 어려운 단어 → 단어(쉬운 말)
+        for pg in doc["pages"]:
+            words = pg.get("easy_words") or []
+            hit = next(((t, w) for _, t in _texts(pg) for w in words if w["ko"] in t), None)
+            if hit:
+                t, w = hit
+                i = t.find(w["ko"]) + len(w["ko"])
+                lo = max(0, i - 30)
+                add("단어 뜻", page=pg["n"], before=t[lo:i + 20], after=t[lo:i] + f"({w['easy']}{' · ' + w['en'] if w.get('en') else ''})" + t[i:i + 20])
+                break
+    if o["terms"]:                                                  # 용어 → 용어(영어)
+        for pg in doc["pages"]:
+            hit = next(((t, tm) for _, t in _texts(pg) for tm in (pg.get("terms") or []) if tm["ko"] in t), None)
+            if hit:
+                t, tm = hit
+                i = t.find(tm["ko"]) + len(tm["ko"])
+                lo = max(0, i - 30)
+                add("영어 용어", page=pg["n"], before=t[lo:i + 20], after=t[lo:i] + f"({tm['en']})" + t[i:i + 20])
+                break
+    n, text = sample()
+    if text:
+        if o["braille"]:                                            # 글 → 점자
+            add("점자", page=n, before=text[:36], after=B.encode(text[:36]))
+        if o["contrast"]:                                           # 보통 → 고대비
+            add("고대비", page=n, before=text[:60], after=text[:60], style="hc")
+        if o["large"] and (o["html"] or o["readpdf"]):              # 보통 → 큰 글씨
+            add("큰 글씨", page=n, before=text[:50], after=text[:50], style="large")
+    try:
+        scan = next((b for pg in doc["pages"] if pg.get("ocr_done") for b in _figures(pg) if b.get("fullpage") and (b.get("ai_desc") or {}).get("texts")), None)
+        if scan:                                                    # 스캔 그림 → 읽어 낸 글자
+            add("스캔본 글자 읽기", beforeImg=thumb(Image.open(d / scan["img"])), after=" ".join(scan["ai_desc"]["texts"])[:130])
+    except Exception:
+        pass
+    return out
+
+
 def _safe_name(s: str) -> str:
     s = re.sub(r'[\\/:*?"<>|]+', " ", s or "").strip()
     return re.sub(r"\s+", " ", s)[:80] or "교재"
@@ -216,11 +378,13 @@ def _run(job, o, task):
             if not o["ai"]:
                 task["note"] = "AI를 쓸 수 없어서 AI 항목은 건너뛰었어요"
 
+            budget = {"figs": MAX_AI_FIGURES, "lock": threading.Lock(), "cut": False}
+
             def one(pg):
                 if task["cancel"]:
                     return
                 try:
-                    if _work_page(job, pg, o):
+                    if _work_page(job, pg, o, budget):
                         with task["lock"]:
                             task["failed"] += 1
                 except Exception:                  # 한 쪽이 잘못돼도 나머지 쪽은 계속 처리한다
@@ -232,8 +396,10 @@ def _run(job, o, task):
                         task["done"] += 1
             list(_POOL.map(one, work))
             jobs.save(job)
+            if budget["cut"]:
+                task["note"] = (task["note"] + " / " if task["note"] else "") + f"그림이 많아서 앞쪽 {MAX_AI_FIGURES}개만 설명했어요"
             if task["failed"] and o["ai"]:
-                task["note"] = f"{task['failed']}쪽은 AI가 응답하지 않아 건너뛰었어요. 다시 변환하면 그 부분만 이어서 해요"
+                task["note"] = (task["note"] + " / " if task["note"] else "") + f"{task['failed']}쪽은 AI가 응답하지 않아 건너뛰었어요. 다시 변환하면 그 부분만 이어서 해요"
         if task["cancel"]:
             task["status"] = "cancelled"
             return
@@ -266,7 +432,15 @@ def _run(job, o, task):
             brf.write_bytes(render.brf_bytes(brf_text))
             files.append({"kind": "brf", "name": brf.name, "path": str(brf)})
         task["files"] = files
+        try:
+            _ensure_colors(job, o)
+            task["summary"], task["compare"] = _summary(job, o), _compares(job, o)
+            if task.get("note"):                                    # AI가 응답하지 않아 건너뛴 일 등은 숨기지 않고 알린다
+                task["summary"] = (task["summary"] + [task["note"]])[:8]
+        except Exception:
+            traceback.print_exc()
         task["status"] = "done"
     except Exception as e:  # 화면에는 짧게, 자세한 것은 서버 창에
         traceback.print_exc()
-        task["status"], task["error"] = "error", str(e)[:120]
+        msg = str(e)
+        task["status"], task["error"] = "error", (msg[:120] if re.search("[가-힣]", msg) else "변환 중 문제가 생겼어요. 잠시 뒤 다시 시도해 주세요")

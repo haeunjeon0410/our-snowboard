@@ -24,7 +24,7 @@ async function alive(base) {
 }
 
 // 1) 강의 파일을 가져와서 서버에 올리고, 자료 요약을 받는다 (AI는 아직 쓰지 않는다)
-async function prepare({ url, name, course }) {
+async function prepare({ url, name, course, light }) {
   const base = await server();
   if (!(await alive(base))) return { ok: false, error: '변환 서버에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요. (내 컴퓨터에서 서버를 켜 쓰는 중이라면 start_server.bat 을 먼저 실행해 주세요)' };
   let resp;
@@ -32,13 +32,15 @@ async function prepare({ url, name, course }) {
   catch (e) { return { ok: false, error: '파일을 가져오지 못했어요. 스노우보드에 로그인되어 있는지 확인해 주세요.' }; }
   if (!resp.ok) return { ok: false, error: `파일을 가져오지 못했어요 (${resp.status})` };
   const blob = await resp.blob();
-  const head = new Uint8Array(await blob.slice(0, 5).arrayBuffer());
-  if (String.fromCharCode(...head) !== '%PDF-') return { ok: false, error: 'PDF 파일이 아니라서 아직 변환할 수 없어요. (지금은 PDF만 지원해요)' };
-  const fname = fileNameFrom(resp, name ? name.replace(/[\\/:*?"<>|]/g, '_') + '.pdf' : 'lecture.pdf');
+  const head = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
+  const isPdf = String.fromCharCode(...head.slice(0, 5)) === '%PDF-', isZip = head[0] === 0x50 && head[1] === 0x4b, isOle = head[0] === 0xd0 && head[1] === 0xcf && head[2] === 0x11 && head[3] === 0xe0;      // PDF / PPTX / PPT
+  if (!isPdf && !isZip && !isOle) return { ok: false, error: 'PDF나 PowerPoint 파일이 아니라서 변환할 수 없어요.' };
+  const ext = isPdf ? '.pdf' : isOle ? '.ppt' : '.pptx';
+  const fname = fileNameFrom(resp, name ? name.replace(/[\\/:*?"<>|]/g, '_') + ext : 'lecture' + ext);
   const title = [course, name].filter(Boolean).join(' · ');
   let r;
   try {
-    r = await fetch(`${base}/api/prepare?filename=${encodeURIComponent(fname)}&course=${encodeURIComponent(course || '')}&title=${encodeURIComponent(title)}`,
+    r = await fetch(`${base}/api/prepare?filename=${encodeURIComponent(fname)}&course=${encodeURIComponent(course || '')}&title=${encodeURIComponent(title)}${light ? '&light=1' : ''}`,
       { method: 'POST', headers: { 'Content-Type': 'application/pdf', ...(await codeHeader()) }, body: blob });
   } catch (e) { return { ok: false, error: '변환 서버에 연결하지 못했어요.' }; }
   if (!r.ok) { let d = ''; try { d = (await r.json()).detail; } catch (e) { /* 무시 */ } return { ok: false, error: d || `자료를 확인하지 못했어요 (${r.status})` }; }

@@ -93,6 +93,28 @@ def start_cleanup_loop(ttl_hours: float, every_s: int = 600, also=None):
     threading.Thread(target=loop, daemon=True).start()
 
 
+def prune_outputs(days: float = 3.0) -> int:
+    """오래된 변환 결과 파일(out/)과 PPT→PDF 보관본을 지운다 (내 컴퓨터에서 오래 쓰면 디스크가 계속 차는 것을 막는다). 올린 자료와 AI 결과는 지우지 않는다."""
+    import shutil
+    limit, n = time.time() - days * 86400, 0
+    try:
+        for d in config.DATA_DIR.iterdir():
+            targets = [d / "out"] if not d.name.startswith("_") else ([d] if d.name == "_converted" else [])
+            for t in targets:
+                if not t.exists():
+                    continue
+                for item in (list(t.iterdir()) if t.is_dir() else []):
+                    try:
+                        if item.stat().st_mtime < (limit if d.name != "_converted" else time.time() - 14 * 86400):
+                            shutil.rmtree(item) if item.is_dir() else item.unlink()
+                            n += 1
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+    return n
+
+
 def get(jid: str):
     with _lock:
         return _jobs.get(jid)

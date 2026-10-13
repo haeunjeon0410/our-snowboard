@@ -19,21 +19,18 @@ M = {}   # 요약 카드(KPI)용 숫자
 
 def load_docs():
     """저장된 자료를 불러오고, 측정에 필요한 AI 결과(띄어쓰기·그림 설명)가 없는 쪽만 채운다 (이미 한 것은 캐시)."""
-    import hashlib
     jobs.load_existing()
     docs = {}
     o = dict(ops.DEFAULTS, figures=True)
-    sample_ids = {hashlib.sha1(p.read_bytes()).hexdigest()[:10] for p in (ROOT / "samples").glob("*.pdf")}   # 측정 대상: samples/ 의 파일만
-    for m in jobs.listing():
-        if m["id"] not in sample_ids:
-            continue
-        j = jobs.get(m["id"])
+    for p in sorted((ROOT / "samples").glob("*.pdf")):                 # 측정 대상: samples/ 의 파일만 (같은 파일이면 이미 처리한 것을 그대로 쓴다)
+        jid = jobs.create(p.read_bytes(), p.name, "", p.stem)
+        j = jobs.get(jid)
         todo = [pg for pg in j["doc"]["pages"] if ops._needs_work(pg, o)]
         for pg in todo:
             ops._work_page(j, pg, o)
         if todo:
             jobs.save(j)
-        docs[m["filename"]] = (m["id"], j["doc"])
+        docs[p.name] = (jid, j["doc"])
     return docs
 
 
@@ -215,8 +212,8 @@ def main():
     secs.append(figure_eval(docs))
     secs.append(color_eval(docs))
     secs.append(usage_eval())
-    secs.append({"title": "측정하지 못한 것 (사람 확인 필요)", "note": "아래 항목은 자동으로 정확도를 잴 수 없어 숫자를 만들지 않았습니다. 변환 화면의 ‘나란히 비교’와 ‘오류 신고’로 사람이 확인합니다.",
-                 "head": ["항목", "이유"], "rows": [["읽는 순서가 올바른지", "정답 순서가 없음"], ["그림 설명이 사실과 맞는지", "의미 판단이 필요함"], ["쉬운 한국어가 뜻을 바꾸지 않았는지", "의미 판단이 필요함"]]})
+    secs.append({"title": "측정하지 못한 것 (사람 확인 필요)", "note": "아래 항목은 자동으로 정확도를 잴 수 없어 숫자를 만들지 않았습니다. 변환이 끝난 화면의 ‘원본과 비교’로 사람이 직접 확인합니다.",
+                 "head": ["항목", "이유"], "rows": [["읽는 순서가 올바른지", "정답 순서가 없음"], ["그림 설명이 사실과 맞는지", "의미 판단이 필요함"], ["단어 뜻(쉬운 말·영어)이 알맞은지", "의미 판단이 필요함"]]})
     kpis = []
     if "b_examples" in M:
         g, n = M["b_examples"]

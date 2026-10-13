@@ -26,6 +26,7 @@ p{margin:.45em 0}ul{padding-left:1.2em;margin:.4em 0}li{margin:.25em 0}
 .pg{margin:2.4em 0 .6em;padding-top:.8em;border-top:1px solid var(--line);color:var(--mut);font-size:.6em;font-weight:600;letter-spacing:0}
 mark{background:var(--mark);color:inherit;font-weight:700;border-radius:4px;padding:0 .1em;box-shadow:inset 0 -.14em 0 var(--acc)}
 .en{color:var(--mut);font-size:.82em}
+.gl{color:var(--acc);font-size:.9em;font-weight:600}
 .note{margin:0 0 1.4em;padding:.55em .9em;background:var(--soft);border-radius:10px;color:var(--mut);font-size:.62em}
 .ai{display:inline-block;margin-left:.45em;padding:0 .5em;border-radius:99px;background:var(--soft);color:var(--mut);font-size:.5em;font-weight:700;letter-spacing:0;vertical-align:.2em;line-height:1.7}
 figure{margin:1.2em 0;background:var(--soft);border-radius:14px;overflow:hidden}
@@ -121,6 +122,23 @@ def _with_terms(html_s: str, terms, used: set) -> str:
     return html_s
 
 
+def _with_words(html_s: str, words, used: set) -> str:
+    """어려운 단어 바로 뒤에 쉬운 말을 괄호로 붙인다 (용이하다(쉽다)). 한 쪽에서 단어마다 처음 나온 곳에만."""
+    for w in words or []:
+        if not (isinstance(w, dict) and w.get("ko") and w.get("easy")):      # 비어 있거나 모양이 다른 항목은 건너뛴다
+            continue
+        key = "w:" + w["ko"]
+        if key in used:
+            continue
+        ke = _e(w["ko"])
+        i = html_s.find(ke)
+        if i < 0 or html_s[i + len(ke):].startswith("("):
+            continue
+        used.add(key)
+        html_s = html_s[:i + len(ke)] + f'<span class="gl">({_e(w["easy"])}{" · " + _e(w["en"]) if w.get("en") else ""})</span>' + html_s[i + len(ke):]
+    return html_s
+
+
 def _jpeg_b64(img: Image.Image, maxw=1100) -> str:
     img = img.convert("RGB")
     if img.width > maxw:
@@ -131,7 +149,10 @@ def _jpeg_b64(img: Image.Image, maxw=1100) -> str:
 
 
 def _fix_all(doc, job_dir: Path, o) -> dict:
-    """색 구분을 켰을 때, 모든 그림의 보정을 한꺼번에(병렬로) 계산해 둔다. numpy가 GIL을 놓아서 스레드로 빨라진다."""
+    """색 구분을 켰을 때, 모든 그림의 보정을 한꺼번에(병렬로) 계산해 둔다. numpy가 GIL을 놓아서 스레드로 빨라진다.
+    같은 변환 안에서 형식(원본 PDF·읽기용 PDF·웹 문서·비교 장면)마다 다시 계산하지 않게 옵션 안에 한 번만 보관한다."""
+    if o["color"] and (o.get("_fixed") or (None,))[0] == str(job_dir):
+        return o["_fixed"][1]
     paths = {}
     for pg in doc["pages"]:
         for b in pg["blocks"]:
@@ -141,7 +162,9 @@ def _fix_all(doc, job_dir: Path, o) -> dict:
         return {}
     with ThreadPoolExecutor(max_workers=min(4, os.cpu_count() or 2)) as ex:
         results = list(ex.map(lambda p: color.fix_image(p, o["colorType"]), paths.values()))
-    return dict(zip(paths.keys(), results))
+    out = dict(zip(paths.keys(), results))
+    o["_fixed"] = (str(job_dir), out)
+    return out
 
 
 def _figure_html(b, pg, job_dir: Path, o, fixed=None) -> str:
@@ -174,25 +197,25 @@ def to_html(doc: dict, job_dir: Path, o: dict, title: str = "") -> str:
     theme = "hc" if o["contrast"] else "light"
     parts = [f'<h1>{_e(title or doc.get("title", ""))}</h1>',
              f'<p class="meta">{_e((doc.get("course") + " · ") if doc.get("course") else "")}{doc["n_pages"]}쪽</p>']
-    if o["easy"] and any(p.get("easy") for p in doc["pages"]):
-        parts.append('<p class="note"><span class="ai" style="margin:0">AI</span> 어려운 문장을 AI가 쉬운 한국어로 바꿨어요. 원문과 조금 다를 수 있어요.</p>')
+    if o["easy"] and any(p.get("easy_words") for p in doc["pages"]):
+        parts.append('<p class="note"><span class="ai" style="margin:0">AI</span> 어려운 단어 뒤에 쉬운 말과 영어를 괄호로 붙였어요. AI가 고른 풀이라 틀릴 수 있어요.</p>')
     fixed = _fix_all(doc, job_dir, o)
+    prev_h = 1                                                    # 문서 제목이 h1이다
     for pg in doc["pages"]:
-        easy = (pg.get("easy") or {}) if o["easy"] else {}
+        words = pg.get("easy_words") if o["easy"] else None
         terms = pg.get("terms") if o["terms"] else None
         used: set = set()
         parts.append(f'<section aria-label="{pg["n"]}쪽"><p class="pg r" data-s="{pg["n"]}쪽">{pg["n"]}쪽</p>')
 
         def text_of(obj, key, tag_ai=True):
-            if key in easy:
-                return _with_terms(_e(easy[key]), terms, used)
             h = _emph_html(obj["text"], obj.get("emph")) if obj.get("emph") else _e(obj["text"])
-            return _with_terms(h, terms, used)
+            return _with_terms(_with_words(h, words, used), terms, used)
 
         for b in pg["blocks"]:
             t = b["type"]
             if t == "heading":
-                lv = min(b.get("level", 2) + 1, 4)
+                lv = min(b.get("level", 2) + 1, 4, prev_h + 1)        # 제목 단계를 건너뛰지 않는다 (스크린리더 제목 탐색용)
+                prev_h = lv
                 parts.append(f'<h{lv} class="r">{text_of(b, b["id"])}</h{lv}>')
             elif t == "paragraph":
                 ocr = ' <span class="ai" title="스캔된 쪽에서 AI가 읽어 낸 글자예요">AI</span>' if "ocr" in (b.get("ai") or []) else ""
@@ -224,5 +247,4 @@ def brf_bytes(text: str) -> bytes:
 
 
 def to_brf(doc: dict, o: dict) -> str:
-    easy = {str(p["n"]): p["easy"] for p in doc["pages"] if p.get("easy")} if o["easy"] else None
-    return outputs.to_braille_text(doc, 32, True, easy, figures=o["figures"])
+    return outputs.to_braille_text(doc, 32, True, None, figures=o["figures"])

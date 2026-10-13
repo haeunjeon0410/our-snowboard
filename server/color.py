@@ -17,7 +17,6 @@ SHIFT = {
     "deutan": [[0, 0, 0], [0.7, 1, 0], [0.7, 0, 1]],
     "tritan": [[1, 0, 0.7], [0, 1, 0.7], [0, 0, 0]],
 }
-MODE_KO = {"protan": "적색약·적색맹(제1형)", "deutan": "녹색약·녹색맹(제2형)", "tritan": "청황색약(제3형)"}
 
 
 def _to_linear(a):
@@ -162,25 +161,6 @@ def apply_hatch(img, classes, masks, cls):
         pat = _pattern(g["pattern_id"], H, W, scale) & full & (cls == g["cid"])   # 글자 픽셀은 건드리지 않음
         out = np.where(pat[..., None], out * 0.35 + target * 0.65, out)
     return Image.fromarray(out.round().astype(np.uint8))
-
-
-def render_page(png_path, page, mode="normal", correct=False, hatch=False):
-    """원본 쪽 이미지에 보정/시뮬레이션/무늬를 적용한다. 반환: (PNG 바이트, 색 분류 목록)"""
-    img = Image.open(png_path).convert("RGB")
-    classes, masks, cls = analyze(img)
-    work = img
-    gain = 1.0
-    if mode in SIM:
-        if correct:
-            gain = best_gain([g["hex"] for g in classes], mode)
-            work = daltonize(img, mode, gain) if gain > 0 else img
-        else:
-            work = simulate(img, mode)
-    if hatch and classes:
-        work = apply_hatch(work, classes, masks, cls)
-    buf = io.BytesIO()
-    work.save(buf, "PNG")
-    return buf.getvalue(), [{k: v for k, v in g.items() if k != "cid"} for g in classes]
 
 
 def page_palette(png_path):
