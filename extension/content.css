@@ -1,0 +1,13 @@
+@font-face{font-family:'OSB Pretendard';font-weight:45 920;font-display:swap;src:url('chrome-extension://__MSG_@@extension_id__/fonts/PretendardVariable.woff2') format('woff2-variations')}
+/* 스노우보드 화면에 붙는 버튼(맞춤 변환)과 안내 띠. 홈 화면 목업과 확장 프로그램이 이 파일을 똑같이 쓴다.
+   홈의 탁한 회청색 톤: 테두리 없이 면 색만, 원색은 쓰지 않는다. */
+.osb-btn{all:unset;box-sizing:border-box;display:inline-flex;align-items:center;gap:6px;height:26px;margin:0 6px 0 10px;padding:0 11px 0 8px;border-radius:7px;background:#e4e9f1;color:#3a475d;font:600 12.5px/1 'OSB Pretendard','Pretendard Variable',Pretendard,'Malgun Gothic',sans-serif;letter-spacing:-.01em;cursor:pointer;vertical-align:middle;white-space:nowrap;transition:background .12s,color .12s}
+.osb-btn svg{width:17px;height:17px;flex:none;color:#5a6b88}
+.osb-btn:hover{background:#d6deeb;color:#26344d}
+.osb-btn:hover svg{color:#3a4c6d}
+.osb-btn:active{background:#cbd5e5}
+.osb-btn:focus-visible{outline:2px solid rgba(58,71,93,.45);outline-offset:2px}
+
+.osb-banner{box-sizing:border-box;display:flex;align-items:center;gap:10px;margin:0 0 14px;padding:9px 12px;border-radius:9px;background:#eceff4;font-family:'OSB Pretendard','Pretendard Variable',Pretendard,'Malgun Gothic',sans-serif;color:#4a5262}
+.osb-banner .osb-logo{flex:none;width:20px;height:20px;border-radius:5px;display:block}
+.osb-banner .osb-bt{flex:1;min-width:0;font-size:12.5px;font-weight:450;line-height:1.5;letter-spacing:-.01em}

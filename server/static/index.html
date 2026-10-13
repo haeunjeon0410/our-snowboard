@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Our Snowboard — 스노우보드 자료를 내 방식으로</title>
+<link rel="icon" type="image/png" href="/static/img/app-icon-32.png">
+<link rel="preload" href="/static/fonts/PretendardVariable.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/static/ds.css">
+<link rel="stylesheet" href="/static/home.css">
+<link rel="stylesheet" href="/static/osb-ui.css">
+<script>
+// 첫 화면이 깜빡이지 않도록 먼저 방식을 정한다: 일반 PDF 버전은 다크, 스노우보드 버전은 그대로
+document.documentElement.classList.add('js');
+(() => { let m = new URLSearchParams(location.search).get('mode'); if (!m) try { m = localStorage.getItem('osb.mode'); } catch (e) {}
+  m = m === 'general' ? 'general' : 'snowboard'; document.documentElement.dataset.mode = m; if (m === 'general') document.documentElement.dataset.theme = 'dark'; })();
+</script>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="/"><img class="logo-img" src="/static/img/app-icon-48.png" alt="" width="26" height="26"><span>Our Snowboard</span></a>
+    <div class="mode" role="group" aria-label="사용 방식">
+      <button type="button" data-mode="snowboard" aria-pressed="true">스노우보드</button>
+      <button type="button" data-mode="general" aria-pressed="false">일반 PDF</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap hero-in">
+      <div class="hero-copy only-sb">
+        <p class="kicker">스노우보드 강의자료를 위한 크롬 확장 프로그램</p>
+        <h1>스노우보드 자료를<br>내 방식으로 받아요</h1>
+        <p class="lead"><span class="ln">강의자료 옆에 <b>맞춤 변환</b> 버튼이 생겨요.</span><span class="ln">원하는 방식을 골라 <b>다운로드</b>할 수 있어요.</span></p>
+        <div class="cta">
+          <button class="btn primary lg" id="install-open" type="button" aria-haspopup="dialog">설치하기</button>
+          <a class="link-btn" href="https://snowboard.sookmyung.ac.kr/" target="_blank" rel="noopener">스노우보드 열기 <span aria-hidden="true">↗</span></a>
+        </div>
+        <p class="fine"><svg class="ico sm"><use href="/static/icons.svg#i-shield"/></svg>로그인 정보는 건드리지 않아요. <span class="only-local">파일은 내 컴퓨터에서 변환해요.</span><span class="only-remote">올린 파일은 변환용으로만 쓰고 몇 시간 뒤 서버에서 지워요.</span></p>
+      </div>
+
+      <div class="hero-copy only-gen">
+        <p class="kicker">스노우보드 밖의 PDF도</p>
+        <h1>PDF를 올려서<br>내 방식으로 받아요</h1>
+        <p class="lead"><span class="ln">PDF를 올리면 작은 창이 떠요.</span><span class="ln">원하는 방식을 골라 <b>다운로드</b>할 수 있어요.</span></p>
+        <p class="fine"><svg class="ico sm"><use href="/static/icons.svg#i-shield"/></svg><span class="only-local">파일은 내 컴퓨터에서 변환해요.</span><span class="only-remote">올린 파일은 변환용으로만 쓰고 몇 시간 뒤 서버에서 지워요.</span></p>
+      </div>
+
+      <div class="gen-stage only-gen">
+        <div id="drop" class="drop big" tabindex="0" role="button" aria-label="PDF 파일을 끌어다 놓거나 눌러서 고르기"><svg class="ico lg"><use href="/static/icons.svg#i-file"/></svg><span>PDF를 끌어다 놓거나 <b>눌러서 고르기</b></span><small>PDF 파일만 · 60MB까지</small><input id="file" type="file" accept="application/pdf,.pdf" hidden></div>
+        <div id="msg" class="msg" role="status" aria-live="polite" hidden></div>
+      </div>
+
+      <div class="stage only-sb" aria-hidden="true">
+        <div class="win win-a">
+          <div class="win-bar"><span class="win-title">snowboard.sookmyung.ac.kr</span></div>
+          <div class="win-body">
+            <p class="sb-course">경영정보시스템 (004)</p>
+            <div class="sb-note"><img class="logo-img sm" src="/static/img/app-icon-48.png" alt="" width="16" height="16"><span>자료 5개를 내 방식으로 바꿔 받을 수 있어요</span></div>
+            <ul class="sb-files">
+              <li><span><svg class="ico sm"><use href="/static/icons.svg#i-file"/></svg>1주차 학습자료</span><span class="osb-btn osb-known"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.4l2.7 2.7L16.2 9.6"/></g></svg><span>변환본 열기</span></span></li>
+              <li><span><svg class="ico sm"><use href="/static/icons.svg#i-file"/></svg>2주차 학습자료</span><span class="osb-btn"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="/static/icons.svg#i-goggles"/></svg><span>맞춤 변환</span></span></li>
+              <li><span><svg class="ico sm"><use href="/static/icons.svg#i-file"/></svg>3주차 학습자료</span><span class="osb-btn"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="/static/icons.svg#i-goggles"/></svg><span>맞춤 변환</span></span></li>
+            </ul>
+          </div>
+        </div>
+        <div class="win win-b">
+          <img class="mascot" src="/static/img/mascot.png" alt="" width="132">
+          <div class="win-bar"><span class="win-title">2주차 학습자료</span></div>
+          <div class="win-body">
+            <div class="mini-tabs"><b>큰 글씨</b><span>그림 설명</span><span>점자</span><span>색 구분</span></div>
+            <p class="mp">신경관 형성은 복합적인 과정으로 각 세포의 구조가 <mark>연속적으로 변화</mark>하며 …</p>
+            <p class="mc"><span class="chip ai">AI 그림 설명</span> 신경판이 접히며 신경관이 만들어지는 과정을 그린 그림입니다.</p>
+            <p class="mb">⠠⠟⠈⠻⠈⠧⠒ ⠚⠻⠠⠻⠵ ⠘⠭⠚⠣⠃⠨⠹⠟</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="features" class="wrap features">
+    <div class="feat-intro">
+      <p class="kicker">기능</p>
+      <h2 class="h2">읽기 어려운 이유를 하나씩 풀었어요</h2>
+      <p class="sub">같은 PDF를 누구나 자기 방식으로 볼 수 있도록 필요한 변환을 한곳에 모았습니다.</p>
+    </div>
+    <ul class="feat-list">
+      <li><svg class="ico lg"><use href="/static/icons.svg#i-book"/></svg><div><h3>읽기 구조화</h3><p>글자를 뽑고 읽는 순서를 바로잡습니다. 사라진 띄어쓰기를 복원하고, 색으로만 강조된 말은 굵은 밑줄로 바꿔요.</p></div></li>
+      <li><svg class="ico lg"><use href="/static/icons.svg#i-image"/></svg><div><h3>그림·도식 설명</h3><p>이미지 속 이름표까지 읽고 그림이 무엇을 보여 주는지 글로 설명합니다. AI가 쓴 부분에는 표시가 붙어요.</p></div></li>
+      <li><svg class="ico lg"><use href="/static/icons.svg#i-contrast"/></svg><div><h3>보기 편하게</h3><p>글씨 크기, 줄 간격, 글꼴, 고대비 테마를 내 눈에 맞춥니다. 설정은 기억해 둬요.</p></div></li>
+      <li><svg class="ico lg"><use href="/static/icons.svg#i-eye"/></svg><div><h3>색각 이상 지원</h3><p>색이 칠해진 그림은 구분이 잘 되도록 색을 보정하고, 같은 색에 같은 무늬를 얹어 줍니다.</p></div></li>
+      <li><svg class="ico lg"><use href="/static/icons.svg#i-volume"/></svg><div><h3>음성 읽기</h3><p>문단 단위로 읽고 속도를 조절할 수 있어요. 코드는 괄호와 들여쓰기까지 말해 줍니다.</p></div></li>
+      <li><svg class="ico lg"><use href="/static/icons.svg#i-braille"/></svg><div><h3>한글 점자</h3><p>한국 점자 규정에 맞춰 변환하고, 점자 프린터용 파일로 내려받을 수 있어요.</p></div></li>
+    </ul>
+  </section>
+
+  <section class="wrap compare" aria-label="변환 전후 비교">
+    <div class="pane before">
+      <p class="pane-tag">스노우보드 원본</p>
+      <p class="raw">신경관형성은복합적인과정으로각세포의삼차원적인구조의연속적변화와각각의세포들과주위세포의부착에의해좌우됨.</p>
+      <div class="ph">이름표가 이미지 안에 있어서 스크린리더는 건너뜁니다</div>
+    </div>
+    <div class="pane after">
+      <p class="pane-tag">내 방식으로 받은 자료 <span class="chip ai">AI</span></p>
+      <p>신경관 형성은 복합적인 과정으로 각 세포의 삼차원적인 구조의 <mark>연속적 변화</mark>와 각각의 세포들과 주위 세포의 부착에 의해 좌우됨.</p>
+      <p class="cap"><b>그림 설명</b> 신경판이 접히고 가운데에서 닫히며 신경관이 만들어지는 과정을 그린 그림이에요.</p>
+      <p class="braille">⠠⠟⠈⠻⠈⠧⠒ ⠚⠻⠠⠻⠵ ⠘⠭⠚⠣⠃⠨⠹⠟</p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <span>모든 사람이 디지털 자료를 잘 이용할 수 있도록.</span>
+    <span class="sep" aria-hidden="true">|</span>
+    <a href="/quality">품질 측정표</a>
+  </div>
+</footer>
+
+<dialog id="install" class="mdlg" aria-labelledby="install-t">
+  <div class="mbar"><span id="install-t">설치하기</span><button class="mx" id="install-x" type="button" aria-label="닫기"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>
+  <div class="mbody">
+    <p class="mlead">크롬에 한 번만 추가하면 스노우보드 강의자료 옆에 <b>맞춤 변환</b> 버튼이 생겨요.</p>
+    <ol class="msteps">
+      <li><span class="n">1</span><div><b>설치 파일을 받아 압축을 풀어요</b></div></li>
+      <li><span class="n">2</span><div><b>크롬 주소창에 입력해요</b><br><button class="mcopy" type="button" data-copy="chrome://extensions" title="눌러서 복사">chrome://extensions</button></div></li>
+      <li><span class="n">3</span><div><b>개발자 모드를 켜고</b> <b>압축해제된 확장 프로그램을 로드합니다</b>를 눌러 풀어 둔 폴더를 골라요</div></li>
+    </ol>
+  </div>
+  <div class="mfoot"><button class="mbtn" id="install-close" type="button">닫기</button><a class="mbtn pri" href="/extension.zip" download>설치 파일 받기</a></div>
+</dialog>
+
+<script src="/static/osb-panel.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+// 스노우보드 버전 / 일반 PDF 버전 전환 (고른 방식은 기억한다)
+const LOCAL = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+document.documentElement.dataset.host = LOCAL ? 'local' : 'remote';
+function setMode(m, save) {
+  document.documentElement.dataset.mode = m;
+  if (m === 'general') document.documentElement.dataset.theme = 'dark'; else delete document.documentElement.dataset.theme;   // 일반 PDF 버전은 다크
+  document.querySelectorAll('.mode button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
+  if (save) try { localStorage.setItem('osb.mode', m); } catch (e) {}
+}
+document.querySelectorAll('.mode button').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode, true)));
+(() => { let m = new URLSearchParams(location.search).get('mode'); if (!m) try { m = localStorage.getItem('osb.mode'); } catch (e) {} setMode(m === 'general' ? 'general' : 'snowboard', false); })();
+// 설치 버튼: 확장 프로그램이 이미 있으면(또는 시연용 표시가 켜져 있으면) "설치 완료"로 보여 주고, 아니면 설치 안내 창을 연다.
+// 시연용: 주소 끝에 ?installed=1 (끄려면 ?installed=0). 한 번 정하면 이 브라우저에 기억한다.
+(() => {
+  const dlg = $('#install'), btn = $('#install-open');
+  const q = new URLSearchParams(location.search).get('installed');
+  try { if (q === '1') localStorage.setItem('osb.installed', '1'); else if (q === '0') localStorage.removeItem('osb.installed'); } catch (e) {}
+  const forced = (() => { try { return localStorage.getItem('osb.installed') === '1'; } catch (e) { return false; } })();
+  const done = () => {
+    btn.classList.add('done'); btn.setAttribute('aria-disabled', 'true'); btn.setAttribute('aria-haspopup', 'false');
+    btn.innerHTML = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M7.8 12.4l2.9 2.9 5.5-5.8"/></svg>설치 완료';
+  };
+  if (forced || document.documentElement.dataset.osbExt) done();
+  else setTimeout(() => { if (document.documentElement.dataset.osbExt) done(); }, 600);
+  btn.addEventListener('click', () => { if (!btn.classList.contains('done')) dlg.showModal(); });
+  $('#install-x').addEventListener('click', () => dlg.close());
+  $('#install-close').addEventListener('click', () => dlg.close());
+  dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });                      // 바깥을 누르면 닫기
+  dlg.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(b.dataset.copy); b.classList.add('copied'); b.textContent = '복사했어요'; setTimeout(() => { b.classList.remove('copied'); b.textContent = b.dataset.copy; }, 1400); } catch (e) {}
+  }));
+})();
+
+// 스크롤하면 요소가 아래에서 부드럽게 떠오른다 (움직임 줄이기 설정이면 바로 보여 준다)
+(() => {
+  const sel = ['.hero-copy > *', '.stage', '.gen-stage', '.feat-intro > *', '.feat-list li', '.compare .pane', '.foot-in'];
+  const els = [...document.querySelectorAll(sel.join(','))];
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce || !('IntersectionObserver' in window)) return;
+  els.forEach(el => {
+    el.classList.add('reveal');
+    const sibs = [...el.parentElement.children].filter(c => c.classList.contains('reveal') || sel.some(q => c.matches(q)));
+    el.style.transitionDelay = Math.min(sibs.indexOf(el), 6) * 90 + 'ms';       // 같은 묶음 안에서는 차례로
+  });
+  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { threshold: 0.12, rootMargin: '0px 0px -6% 0px' });
+  els.forEach(el => io.observe(el));
+})();
+
+// 보조 기능: PDF 직접 올리기 — 스노우보드와 똑같은 패널을 쓴다
+const drop = $('#drop'), fileIn = $('#file'), msg = $('#msg');
+drop.addEventListener('click', () => fileIn.click());
+drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileIn.click(); } });
+['dragover', 'dragenter'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => pick(e.dataTransfer.files[0]));
+fileIn.addEventListener('change', () => { pick(fileIn.files[0]); fileIn.value = ''; });
+function say(t, kind) { msg.hidden = !t; msg.className = 'msg ' + (kind || ''); msg.textContent = t || ''; }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function homeAdapter(file) {
+  const j = async r => { if (!r.ok) { let d = ''; try { d = (await r.json()).detail; } catch (e) {} throw new Error(d || '요청에 실패했어요 (' + r.status + ')'); } return r.json(); };
+  const code = () => { try { const c = localStorage.getItem('osb.code'); return c ? { 'X-OSB-Code': c } : {}; } catch (e) { return {}; } };
+  return {
+    name: file.name.replace(/\.pdf$/i, ''), sub: '',
+    prepare: () => fetch('/api/prepare?filename=' + encodeURIComponent(file.name), { method: 'POST', headers: { 'Content-Type': 'application/pdf', ...code() }, body: file }).then(j),
+    make: (job, opts) => fetch(`/api/jobs/${job}/make`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...code() }, body: JSON.stringify(opts) }).then(j).then(r => r.task),
+    setCode: async c => { try { localStorage.setItem('osb.code', String(c || '').trim()); } catch (e) {} },
+    status: id => fetch('/api/tasks/' + id).then(j),
+    cancel: id => fetch(`/api/tasks/${id}/cancel`, { method: 'POST' }),
+    save: async files => { for (const f of files) { const a = document.createElement('a'); a.href = f.url; a.download = f.name; document.body.append(a); a.click(); a.remove(); await sleep(400); } },
+    loadOptions: async () => { try { return JSON.parse(localStorage.getItem('osb.opts') || 'null'); } catch (e) { return null; } },
+    saveOptions: async o => { try { localStorage.setItem('osb.opts', JSON.stringify(o)); } catch (e) {} }
+  };
+}
+function pick(f) {
+  if (!f) return;
+  if (!/\.pdf$/i.test(f.name)) { say('PDF 파일만 올릴 수 있어요.', 'err'); return; }
+  say('');
+  OSBPanel.open({ adapter: homeAdapter(f) });
+}
+// 화면 캡처용: ?demo=1 이면 서버 없이 패널을 띄워 둔다
+if (new URLSearchParams(location.search).has('demo')) OSBPanel.preview(null);
+</script>
+</body>
+</html>

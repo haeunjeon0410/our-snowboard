@@ -1,0 +1,16 @@
+.env
+.git
+.claude
+**/__pycache__
+**/*.pyc
+samples
+docs
+eval
+tools
+node_modules
+output/*
+!output/_eval
+server/.cache
+extension/test_*.mjs
+*.pdf
+HANDOFF.md

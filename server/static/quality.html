@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>변환 품질 측정표 · Our Snowboard</title>
+<link rel="icon" type="image/png" href="/static/img/app-icon-32.png">
+<link rel="preload" href="/static/fonts/PretendardVariable.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/static/ds.css">
+<style>
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+.nav{position:sticky;top:0;z-index:40;background:color-mix(in srgb,var(--bg) 85%,transparent);-webkit-backdrop-filter:saturate(1.4) blur(14px);backdrop-filter:saturate(1.4) blur(14px)}
+.nav-in{display:flex;align-items:center;justify-content:space-between;height:64px}
+.head{padding:36px 0 24px}
+.head h1{font-size:clamp(28px,3.6vw,40px);letter-spacing:-.04em;font-weight:700;margin:10px 0 10px}
+.head p{color:var(--text-2);max-width:40em;font-size:16px;line-height:1.7}
+.meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:8px 0 44px;border:1px solid var(--border);border-radius:14px;background:var(--surface);box-shadow:var(--shadow-1);overflow:hidden}
+.kpi{padding:22px 24px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+.kpi:nth-child(3n){border-right:0}.kpi:nth-last-child(-n+3){border-bottom:0}
+.kpi .k{font-size:13px;font-weight:600;color:var(--text-3)}
+.kpi .v{font-size:36px;font-weight:650;letter-spacing:-.045em;line-height:1.15;margin:6px 0 8px;font-variant-numeric:tabular-nums;color:var(--text)}
+.kpi .s{font-size:13.5px;color:var(--text-2);line-height:1.55}
+.sec{margin:0 0 28px}
+.sec h2{font-size:18px;font-weight:620;letter-spacing:-.025em;margin-bottom:8px}
+.note{margin-bottom:12px;color:var(--text-2);font-size:14px;line-height:1.7;max-width:60em}
+.tbl-card{overflow-x:auto;border:1px solid var(--border);border-radius:14px;background:var(--surface);box-shadow:var(--shadow-1)}
+table{border-collapse:collapse;width:100%;font-size:14.5px}
+th,td{padding:12px 16px;text-align:left;border-top:1px solid var(--border);vertical-align:top}
+thead th{border-top:0;background:var(--surface-2);font-size:13px;color:var(--text-2);font-weight:700;white-space:nowrap}
+td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+th.n{text-align:right}
+tbody tr:hover td{background:color-mix(in srgb,var(--surface-2) 60%,transparent)}
+.empty{padding:48px;text-align:center;border:2px dashed var(--border-2);border-radius:22px;color:var(--text-2)}
+.foot{padding:24px 0 56px;color:var(--text-3);font-size:13.5px}
+@media (max-width:900px){.kpis{grid-template-columns:1fr 1fr}.kpi:nth-child(3n){border-right:1px solid var(--border)}.kpi:nth-child(2n){border-right:0}.kpi:nth-last-child(-n+3){border-bottom:1px solid var(--border)}.kpi:nth-last-child(-n+2){border-bottom:0}}
+@media (max-width:560px){.kpis{grid-template-columns:1fr}.kpi{border-right:0!important;border-bottom:1px solid var(--border)!important}.kpi:last-child{border-bottom:0!important}.wrap{padding:0 16px}}
+</style>
+</head>
+<body>
+<header class="nav"><div class="wrap nav-in">
+  <a class="brand" href="/"><img class="logo-img" src="/static/img/app-icon-48.png" alt="" width="26" height="26"><span>Our Snowboard</span></a>
+  <a class="btn" href="/"><svg class="ico sm"><use href="/static/icons.svg#i-arrow-left"/></svg>처음으로</a>
+</div></header>
+<main class="wrap">
+  <section class="head">
+    <span class="chip">직접 잰 값만 실었어요</span>
+    <h1>변환 품질 측정표</h1>
+    <p>샘플 강의 자료로 변환 결과를 측정했어요. 자동으로 잴 수 없는 항목은 숫자를 만들지 않고 따로 표시했습니다.</p>
+    <div class="meta" id="meta"></div>
+  </section>
+  <div id="out"><div class="skeleton" style="height:140px"></div></div>
+  <p class="foot">측정 방법과 기준은 각 표의 설명을 참고하세요. 다시 측정하려면 <code>python -m eval.run_eval</code> 을 실행하면 돼요.</p>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+fetch('/api/quality').then(r => r.json()).then(d => {
+  const out = $('#out');
+  if (!d.ready) { out.innerHTML = '<div class="empty"><img src="/static/img/mascot-line.png" alt=""><p class="t">아직 측정하지 않았어요</p><p class="s">터미널에서 <code>python -m eval.run_eval</code> 을 실행하면 이 표가 채워져요.</p></div>'; return; }
+  $('#meta').innerHTML = `<span class="chip">측정 ${esc(d.when)}</span>` + d.samples.map(s => `<span class="chip">${esc(s)}</span>`).join('');
+  const kp = (d.kpis || []).map(k => `<article class="kpi ${esc(k.tone)}"><p class="k">${esc(k.label)}</p><p class="v">${esc(k.value)}</p><p class="s">${esc(k.caption)}</p></article>`).join('');
+  const secs = d.sections.map(s => `<section class="sec"><h2>${esc(s.title)}</h2>${s.note ? `<div class="note">${esc(s.note)}</div>` : ''}
+    <div class="tbl-card"><table><thead><tr>${s.head.map((h, i) => `<th class="${i ? 'n' : ''}">${esc(h)}</th>`).join('')}</tr></thead>
+    <tbody>${s.rows.map(r => `<tr>${r.map((c, i) => `<td class="${i ? 'n' : ''}">${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section>`).join('');
+  out.innerHTML = (kp ? `<div class="kpis">${kp}</div>` : '') + secs;
+});
+</script>
+</body>
+</html>

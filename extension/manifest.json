@@ -1,0 +1,64 @@
+{
+  "manifest_version": 3,
+  "name": "Our Snowboard — 맞춤 변환",
+  "version": "0.1.0",
+  "description": "스노우보드 강의 자료를 내가 보기 편한 방식(큰 글씨, 음성, 점자, 색 보정 등)으로 바꿔 받습니다.",
+  "default_locale": "ko",
+  "permissions": [
+    "storage",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://snowboard.sookmyung.ac.kr/*",
+    "http://localhost:8790/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://snowboard.sookmyung.ac.kr/*",
+        "http://localhost:8790/mock*"
+      ],
+      "js": [
+        "panel.js",
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "http://localhost:8790/*"
+      ],
+      "js": [
+        "mark.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Our Snowboard"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "fonts/*",
+        "icons/*"
+      ],
+      "matches": [
+        "https://snowboard.sookmyung.ac.kr/*",
+        "http://localhost:8790/*"
+      ]
+    }
+  ]
+}
