@@ -34,6 +34,20 @@ function row(def) {
   return label;
 }
 
+// 켜기/끄기: 누르는 즉시 적용된다 (아래 항목 저장과는 별개)
+function showPower(on) {
+  $('#power').setAttribute('aria-checked', String(on));
+  $('#pw-s').textContent = on ? '스노우보드에 맞춤 변환 버튼을 보여 줘요' : '꺼져 있어요. 스노우보드에 버튼이 보이지 않아요';
+  $('#main').classList.toggle('off', !on);
+  $('#save').disabled = !on;
+}
+chrome.storage.sync.get('enabled').then((r) => showPower(!(r && r.enabled === false)));
+$('#power').addEventListener('click', () => {
+  const on = $('#power').getAttribute('aria-checked') !== 'true';
+  showPower(on);
+  chrome.storage.sync.set({ enabled: on });
+});
+
 chrome.storage.sync.get('opts').then((r) => {
   opts = { ...DEFAULTS, ...((r && r.opts) || {}) };
   $('#list').replaceChildren(...OPTIONS.map(row));

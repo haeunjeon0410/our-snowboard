@@ -1,11 +1,11 @@
 /* 스노우보드 화면에 붙는 버튼(맞춤 변환)과 안내 띠. 홈 화면 목업과 확장 프로그램이 이 파일을 똑같이 쓴다.
-   홈의 탁한 회청색 톤: 테두리 없이 면 색만, 원색은 쓰지 않는다. */
-.osb-btn{all:unset;box-sizing:border-box;display:inline-flex;align-items:center;gap:6px;height:26px;margin:0 6px 0 10px;padding:0 11px 0 8px;border-radius:7px;background:#e4e9f1;color:#3a475d;font:600 12.5px/1 'OSB Pretendard','Pretendard Variable',Pretendard,'Malgun Gothic',sans-serif;letter-spacing:-.01em;cursor:pointer;vertical-align:middle;white-space:nowrap;transition:background .12s,color .12s}
-.osb-btn svg{width:17px;height:17px;flex:none;color:#5a6b88}
-.osb-btn:hover{background:#d6deeb;color:#26344d}
-.osb-btn:hover svg{color:#3a4c6d}
-.osb-btn:active{background:#cbd5e5}
-.osb-btn:focus-visible{outline:2px solid rgba(58,71,93,.45);outline-offset:2px}
+   아이스 블루·화이트·네이비. 얇고 은은한 블루그레이 테두리(크기에 영향 없는 안쪽 선), 그라데이션·그림자 없음. */
+.osb-btn{all:unset;box-sizing:border-box;display:inline-flex;align-items:center;gap:4px;height:24px;margin:0 5px 0 8px;padding:0 9px 0 7px;border-radius:7px;background:#f5f9fe;box-shadow:inset 0 0 0 1px rgba(100,130,176,.42);color:#264e8a;font:600 12.5px/1 'OSB Pretendard','Pretendard Variable',Pretendard,'Malgun Gothic',sans-serif;letter-spacing:-.01em;cursor:pointer;vertical-align:middle;white-space:nowrap;transition:background .12s,box-shadow .12s,color .12s}
+.osb-btn svg{width:15px;height:15px;flex:none;color:#3a6aae}
+.osb-btn:hover{background:#e8f0fb;box-shadow:inset 0 0 0 1px rgba(60,100,160,.62);color:#1d4278}
+.osb-btn:hover svg{color:#2c5a9c}
+.osb-btn:active{background:#dce8f8}
+.osb-btn:focus-visible{outline:2px solid rgba(38,78,138,.55);outline-offset:2px}
 
 .osb-banner{box-sizing:border-box;display:flex;align-items:center;gap:10px;margin:0 0 14px;padding:9px 12px;border-radius:9px;background:#eceff4;font-family:'OSB Pretendard','Pretendard Variable',Pretendard,'Malgun Gothic',sans-serif;color:#4a5262}
 .osb-banner .osb-logo{flex:none;width:20px;height:20px;border-radius:5px;display:block}

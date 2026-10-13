@@ -17,9 +17,9 @@
 :host{all:initial}
 *{box-sizing:border-box;font-family:${FONT}}
 .scrim{position:fixed;inset:0;background:rgba(28,34,48,.26);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);animation:fade .16s ease-out}
-.win{position:fixed;left:50%;top:max(40px,9vh);transform:translateX(-50%);width:min(440px,calc(100vw - 24px));max-height:calc(100vh - 72px);display:flex;flex-direction:column;background:#fbfcfd;border-radius:12px;box-shadow:0 0 0 1px rgba(20,35,60,.14),0 28px 70px rgba(20,35,60,.32);overflow:hidden;color:#1c2230;font:400 14px/1.5 ${FONT};letter-spacing:-.01em;animation:pop .2s cubic-bezier(.2,.8,.2,1)}
+.win{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(440px,calc(100vw - 24px));max-height:calc(100vh - 48px);display:flex;flex-direction:column;background:#fbfcfd;border-radius:12px;box-shadow:0 0 0 1px rgba(20,35,60,.14),0 28px 70px rgba(20,35,60,.32);overflow:hidden;color:#1c2230;font:400 14px/1.5 ${FONT};letter-spacing:-.01em;animation:pop .2s cubic-bezier(.2,.8,.2,1)}
 :host(.inline) .win{position:relative;left:auto;top:auto;transform:none;width:100%;max-height:none;animation:none}
-@keyframes fade{from{opacity:0}}@keyframes pop{from{opacity:0;transform:translateX(-50%) translateY(8px) scale(.985)}}
+@keyframes fade{from{opacity:0}}@keyframes pop{from{opacity:0;transform:translate(-50%,calc(-50% + 8px)) scale(.985)}}
 .bar{flex:none;height:42px;display:flex;align-items:center;justify-content:center;position:relative;background:#eceff4;border-bottom:1px solid rgba(20,35,60,.1);cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none}
 .bar.drag{cursor:grabbing}
 .bar .t{font-size:13px;font-weight:600;color:#3a475d}
@@ -203,15 +203,8 @@
       const on = OPTIONS.filter(d => (!cfg.only || cfg.only.includes(d.key)) && eff[d.key]).map(d => SHORT[d.key]);
       return on.length ? on.join(' · ') : '선택 없음';
     };
-    let hintEl = null, sumEl = null;
-    function refreshHint() {
-      if (!hintEl) return;
-      if (sumEl) sumEl.textContent = summary();
-      const eff = effective();
-      const aiOn = OPTIONS.some(d => d.ai && eff[d.key]);
-      hintEl.textContent = aiOn ? 'AI 항목은 시간이 더 걸리고 학교 AI 크레딧을 써요.' : '';
-      hintEl.style.display = aiOn ? '' : 'none';
-    }
+    let sumEl = null;
+    const refreshHint = () => { if (sumEl) sumEl.textContent = summary(); };
 
     function render() {
       body.replaceChildren(); foot.replaceChildren();
@@ -225,7 +218,6 @@
         const head = h('button', { class: 'ohead', type: 'button', 'aria-expanded': String(optOpen) }, h('span', { class: 'ol' }, '옵션'), sumEl,
           h('span', { class: 'oc', html: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>' }));
         const list = h('div', { class: 'opts', id: 'osb-opts' }, ...defs.map(optionRow).filter(Boolean));
-        hintEl = cfg.only ? null : h('div', { class: 'hint' }); if (hintEl) list.append(hintEl);
         head.setAttribute('aria-controls', 'osb-opts');
         list.hidden = !optOpen;
         head.addEventListener('click', () => { optOpen = !optOpen; head.setAttribute('aria-expanded', String(optOpen)); list.hidden = !optOpen; });

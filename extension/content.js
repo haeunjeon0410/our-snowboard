@@ -8,10 +8,11 @@
     'a[href*="/mock/file/"]'                           // 개발용 모의 화면
   ].join(',');
   const DONE = 'osbDone';
+  // 버튼 아이콘: Phosphor 'magic-wand' (MIT, https://phosphoricons.com) — 현재 글자색을 따른다
+  const ICON = '<svg viewBox="0 0 256 256" aria-hidden="true"><path fill="currentColor" d="M48 64a8 8 0 0 1 8-8h16V40a8 8 0 0 1 16 0v16h16a8 8 0 0 1 0 16H88v16a8 8 0 0 1-16 0V72H56a8 8 0 0 1-8-8m136 128h-8v-8a8 8 0 0 0-16 0v8h-8a8 8 0 0 0 0 16h8v8a8 8 0 0 0 16 0v-8h8a8 8 0 0 0 0-16m56-48h-16v-16a8 8 0 0 0-16 0v16h-16a8 8 0 0 0 0 16h16v16a8 8 0 0 0 16 0v-16h16a8 8 0 0 0 0-16m-20.69-64L80 219.31a16 16 0 0 1-22.62 0l-20.7-20.68a16 16 0 0 1 0-22.63L176 36.69a16 16 0 0 1 22.63 0l20.68 20.68a16 16 0 0 1 0 22.63m-54.63 32L144 91.31l-96 96L68.68 208ZM208 68.69L187.31 48l-32 32L176 100.69Z"/></svg>';
   // PDF가 아닌 게 분명한 첨부(PPT·워드·한글·압축 등)에는 버튼을 붙이지 않는다. 이름만으로 알 수 없으면 붙이고, 누를 때 확인한다.
   const NOT_PDF = /\.(pptx?|docx?|xlsx?|hwpx?|zip|mp4|mp3|png|jpe?g)(?:[?#\s]|$)/i;
   const eligible = (a) => !NOT_PDF.test(a.textContent || '') && !NOT_PDF.test(a.getAttribute('href') || '');
-  const GOGGLES = '<svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3.2 9.6c0-1.5 1.2-2.7 2.7-2.7h12.2c1.5 0 2.7 1.2 2.7 2.7v3c0 2.3-1.9 4.2-4.2 4.2h-.9c-1 0-1.9-.5-2.4-1.3-.4-.6-1-.9-1.7-.9h-.2c-.7 0-1.3.3-1.7.9-.5.8-1.4 1.3-2.4 1.3h-.9c-2.3 0-4.2-1.9-4.2-4.2z"/><path d="M3.2 10.2H1.6M20.8 10.2h1.6"/><path d="M7.4 10.4l1.8-1.8M11 10.4l1.8-1.8" opacity=".5"/></g></svg>';
 
   // 과목 이름: 강좌 화면의 제목 (예: "경영정보시스템 (004)"), 다른 화면에서는 위쪽 경로 표시에서 찾는다.
   function courseName() {
@@ -49,7 +50,7 @@
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'osb-btn';
-    btn.innerHTML = GOGGLES + '<span>맞춤 변환</span>';
+    btn.innerHTML = ICON + '<span>맞춤 변환</span>';
     btn.setAttribute('aria-label', `${label} 파일을 내 방식으로 변환`);
     btn.title = '큰 글씨·그림 설명·점자 등 내게 맞는 형태로 바꿔 받아요';
     a.insertAdjacentElement('afterend', btn);
@@ -77,8 +78,28 @@
   }
 
   function scan(root = document) { root.querySelectorAll(FILE_LINK).forEach(addButton); }
-  scan();
-  addBanner();
-  new MutationObserver(muts => { for (const m of muts) for (const n of m.addedNodes) if (n.nodeType === 1) { if (n.matches && n.matches(FILE_LINK)) addButton(n); scan(n); } })
-    .observe(document.body, { childList: true, subtree: true });
+  const observer = new MutationObserver(muts => { for (const m of muts) for (const n of m.addedNodes) if (n.nodeType === 1) { if (n.matches && n.matches(FILE_LINK)) addButton(n); scan(n); } });
+
+  // 확장 프로그램 켜기/끄기 (팝업의 스위치). 끄면 버튼과 안내 띠를 모두 떼고, 켜면 다시 붙인다.
+  let on = false;
+  function apply(next) {
+    if (next === on) return;
+    on = next;
+    if (on) {
+      scan(); addBanner();
+      observer.observe(document.body, { childList: true, subtree: true });
+    } else {
+      observer.disconnect();
+      document.querySelectorAll('.osb-btn, #osb-banner').forEach(el => el.remove());
+      document.querySelectorAll('[data-osb-done]').forEach(el => delete el.dataset[DONE]);
+    }
+  }
+  const readEnabled = async () => { try { return store ? (await store.get('enabled')).enabled !== false : true; } catch (e) { return true; } };
+  readEnabled().then(apply);
+  const resync = () => { if (!document.hidden) readEnabled().then(apply); };
+  document.addEventListener('visibilitychange', resync);
+  window.addEventListener('focus', resync);
+  try {
+    if (chrome.storage && chrome.storage.onChanged) chrome.storage.onChanged.addListener((ch, area) => { if (area === 'sync' && ch.enabled) apply(ch.enabled.newValue !== false); });
+  } catch (e) { /* 개발용 가짜 chrome에는 없다 */ }
 })();

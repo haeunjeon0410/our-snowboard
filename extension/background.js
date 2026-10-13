@@ -70,6 +70,19 @@ const handlers = {
   }
 };
 
+// 툴바 아이콘 표시: 꺼져 있으면 'OFF'
+async function showBadge() {
+  try {
+    const off = (await chrome.storage.sync.get('enabled')).enabled === false;
+    await chrome.action.setBadgeText({ text: off ? 'OFF' : '' });
+    if (off) await chrome.action.setBadgeBackgroundColor({ color: '#7a8699' });
+  } catch (e) { /* 시험용 가짜 chrome에는 없다 */ }
+}
+try {
+  showBadge();
+  if (chrome.storage && chrome.storage.onChanged) chrome.storage.onChanged.addListener((ch, area) => { if (area === 'sync' && ch.enabled) showBadge(); });
+} catch (e) { /* 무시 */ }
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const fn = msg && handlers[msg.type];
   if (!fn) return;

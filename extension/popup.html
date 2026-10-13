@@ -11,7 +11,18 @@ html,body{margin:0;background:#fbfcfd}
 body{width:330px;overflow:hidden;color:#1c2230;font:400 14px/1.5 'Pretendard Variable',Pretendard,'Malgun Gothic',sans-serif;letter-spacing:-.01em}
 .bar{height:38px;display:flex;align-items:center;justify-content:center;background:#eceff4;border-bottom:1px solid rgba(20,35,60,.1)}
 .bar span{font-size:13px;font-weight:600;color:#3a475d}
-.body{padding:8px 16px 4px}
+.power{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid rgba(20,35,60,.08)}
+.power .pt{flex:1;min-width:0}
+.power b{display:block;font-size:14px;font-weight:600;line-height:1.35}
+.power small{display:block;font-size:12px;color:#6b7689;line-height:1.4}
+.sw{all:unset;position:relative;flex:none;width:42px;height:26px;border-radius:99px;background:#c3ccda;cursor:pointer;transition:background .2s}
+.sw::after{content:'';position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(20,35,60,.3);transition:transform .22s cubic-bezier(.3,.8,.3,1)}
+.sw[aria-checked=true]{background:#4a6794}
+.sw[aria-checked=true]::after{transform:translateX(16px)}
+.sw:focus-visible{outline:2px solid rgba(58,71,93,.55);outline-offset:2px}
+.body{padding:8px 16px 4px;transition:opacity .2s}
+.body.off{opacity:.45;pointer-events:none}
+@media (prefers-reduced-motion:reduce){.sw,.sw::after,.body{transition:none}}
 .lead{margin:2px 2px 4px;font-size:12px;color:#6b7689;line-height:1.5}
 .opt{display:grid;grid-template-columns:20px 1fr auto;column-gap:11px;align-items:center;padding:7px 2px;cursor:pointer}
 .opt+.opt{border-top:1px solid rgba(20,35,60,.07)}
@@ -33,7 +44,11 @@ body{width:330px;overflow:hidden;color:#1c2230;font:400 14px/1.5 'Pretendard Var
 </head>
 <body>
 <div class="bar"><span>맞춤 설정</span></div>
-<div class="body">
+<div class="power">
+  <div class="pt"><b id="pw-t">확장 프로그램 사용</b><small id="pw-s">스노우보드에 맞춤 변환 버튼을 보여 줘요</small></div>
+  <button class="sw" id="power" type="button" role="switch" aria-checked="true" aria-labelledby="pw-t"></button>
+</div>
+<div class="body" id="main">
   <p class="lead">정해 두면 변환할 때마다 이 설정으로 시작해요.</p>
   <div id="list" role="group" aria-label="기본 설정"></div>
   <div class="hint" id="st" role="status">서버를 확인하고 있어요</div>

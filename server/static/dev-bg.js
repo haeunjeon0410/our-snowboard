@@ -23,8 +23,12 @@
       return { ok: true };
     }
   };
+  const listeners = [];
   window.chrome = {
     runtime: { sendMessage: async (msg) => { try { return await handlers[msg.type](msg); } catch (e) { return { ok: false, error: e.message }; } }, onMessage: { addListener() {} } },
-    storage: { sync: { get: async (k) => ({ [k]: ls(k) }), set: async (o) => { for (const k in o) ls(k, o[k]); } } }
+    storage: {
+      sync: { get: async (k) => ({ [k]: ls(k) }), set: async (o) => { const ch = {}; for (const k in o) { ch[k] = { oldValue: ls(k), newValue: o[k] }; ls(k, o[k]); } listeners.forEach(f => f(ch, 'sync')); } },
+      onChanged: { addListener: (f) => listeners.push(f) }
+    }
   };
 })();
