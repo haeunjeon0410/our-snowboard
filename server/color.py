@@ -226,10 +226,29 @@ def min_confusion(hexes, mode=None, correct=False, gain=1.0):
     return best
 
 
+FLAT_MIN = 0.6        # 색칠된 부분이 이만큼 이상 '평평'해야 도식으로 보고 색 구분을 돕는다 (사진·번지는 그림은 제외)
+
+
+def flat_fraction(img) -> float:
+    """색칠된 픽셀 중 이웃 픽셀과 거의 같은 색인 비율. 색 칸이 또렷한 도식은 높고(약 0.6~0.9),
+    사진·현미경 이미지·그라데이션처럼 색이 번지는 그림은 낮다(약 0.1~0.5). 색칠된 부분이 거의 없으면 1."""
+    a = np.asarray(img.convert("RGB"), dtype=np.int16)
+    mx, mn = a.max(2), a.min(2)
+    colored = ((mx - mn) > 0.30 * mx) & (mx > 46)          # hsv 채도 0.30↑, 밝기 0.18↑와 같은 기준 (정수 계산이라 빠르다)
+    if colored.mean() < 0.01:
+        return 1.0
+    d = np.zeros(mx.shape, dtype=np.int16)
+    for dy, dx in ((0, 1), (1, 0), (1, 1), (1, -1)):
+        np.maximum(d, np.abs(a - np.roll(np.roll(a, dy, 0), dx, 1)).max(2), out=d)
+    return float((d <= 3)[colored].mean())
+
+
 def fix_image(png_path, mode="deutan"):
     """색으로만 구분된 그림을 구분하기 쉽게: 색 보정(쪽마다 가장 잘 보이는 세기) + 같은 색에 같은 무늬.
     반환: (RGB 이미지, 범례 목록). 색이 2종류 미만이면 원본 그대로."""
     img = Image.open(png_path).convert("RGB")
+    if flat_fraction(img) < FLAT_MIN:                  # 사진처럼 색이 번지는 그림에는 무늬를 덮지 않는다
+        return img, []
     classes, masks, cls = analyze(img)
     if len(classes) < 2:
         return img, []

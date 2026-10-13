@@ -63,6 +63,10 @@ def _color_count(job, b) -> int:
         img.thumbnail((420, 420))
         classes, _, _ = color.analyze(img, min_area=0.04)
         b["colors"] = len(classes)
+        if b["colors"] >= 2:                         # 사진처럼 색이 번지는 그림은 '색이 칠해진 그림'으로 세지 않는다
+            full = Image.open(jobs.job_dir(job["meta"]["id"]) / b["img"])
+            if color.flat_fraction(full) < color.FLAT_MIN:
+                b["colors"] = 0
     except Exception:
         b["colors"] = 0
     return b["colors"]

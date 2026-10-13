@@ -95,5 +95,23 @@ o3 = dict(o, figures=False)
 out3 = pymupdf.open("pdf", pdf_out.to_pdf(doc, jobs.job_dir(jid), o3, title="시험"))
 check("10. 그림 설명을 끄면 부록이 붙지 않는다", len(out3) == len(src))
 
+# ── 가로 슬라이드(제2장, 960×540) ──
+pdf2 = (ROOT / "samples" / "제2장.pdf").read_bytes()
+jid2 = jobs.create(pdf2, "제2장.pdf", "시험 과목", "시험 자료2")
+job2 = jobs.get(jid2)
+src2 = pymupdf.open(str(jobs.job_dir(jid2) / "original.pdf"))
+doc2 = copy.deepcopy(job2["doc"])
+for pg in doc2["pages"]:
+    for b in pg["blocks"]:
+        if b["type"] == "figure" and not b.get("fullpage"):
+            b["ai_desc"] = {"desc": "시험용 그림 설명", "texts": [], "color_note": ""}
+out4 = pymupdf.open("pdf", pdf_out.to_pdf(doc2, jobs.job_dir(jid2), dict(o, color=True), title="가로"))
+landscape = all(p.rect.width > p.rect.height for p in src2)
+check("11. 가로 슬라이드는 결과도 모든 쪽(부록 포함)이 가로", landscape and all(p.rect.width > p.rect.height for p in out4), f"{len(src2)}쪽 → {len(out4)}쪽")
+check("12. 가로 슬라이드의 원본 쪽 크기·방향이 같다", same_pages(src2, out4, len(src2)))
+photo_changed = sum(1 for i in range(len(src2)) if float(np.abs(px(src2, i) - px(out4, i)).mean()) > 0.05)
+n_fig2 = sum(1 for pg in doc2["pages"] for b in pg["blocks"] if b["type"] == "figure")
+check("13. 사진·현미경처럼 색이 번지는 그림에는 색 구분 무늬를 덮지 않는다", photo_changed <= 3, f"{len(src2)}쪽 중 {photo_changed}쪽만 바뀜 (그림 {n_fig2}개)")
+
 print("\n모두 통과" if not fail else f"\n{fail}개 실패")
 sys.exit(1 if fail else 0)
