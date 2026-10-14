@@ -12,8 +12,8 @@ from PIL import Image
 from . import color, config, enrich, jobs, llm, pdf_out, pdf_read, render
 from .extract import _needs_spacing
 
-_POOL = ThreadPoolExecutor(max_workers=8)          # 쪽 단위 동시 처리 (AI 서버는 동시 16개까지 오류 없이 받았다)
-_FIG_POOL = ThreadPoolExecutor(max_workers=10)     # 한 쪽 안의 그림 설명·글 풀이 동시 처리 (쪽 풀과 분리해 서로 막지 않게)
+_POOL = ThreadPoolExecutor(max_workers=12)         # 쪽 단위 동시 처리 (AI 서버는 동시 32개까지 오류 없이 받았다)
+_FIG_POOL = ThreadPoolExecutor(max_workers=20)     # 한 쪽 안의 그림 설명·글 풀이 동시 처리 (쪽 풀과 분리해 서로 막지 않게)
 TASKS: dict[str, dict] = {}
 
 DEFAULTS = {"large": True, "contrast": False, "figures": True, "easy": False, "terms": False,
