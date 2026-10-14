@@ -28,7 +28,7 @@
 
 | 마스코트에서 바로 선택 | 확장 프로그램 설정 |
 |---|---|
-| ![마스코트 안내](assets/mascot-chooser.png) | ![설정](assets/settings.png) |
+| ![마스코트 안내](assets/mascot.gif) | ![설정](assets/settings.png) |
 
 **3. 다운로드합니다.** 체크한 항목만 처리해서 받습니다. 스노우보드 밖의 PDF·PPT도 홈페이지에서 올려 변환할 수 있습니다.
 
