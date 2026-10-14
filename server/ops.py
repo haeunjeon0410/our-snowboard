@@ -12,8 +12,8 @@ from PIL import Image
 from . import color, config, enrich, jobs, llm, pdf_out, pdf_read, render
 from .extract import _needs_spacing
 
-_POOL = ThreadPoolExecutor(max_workers=6)          # 쪽 단위 동시 처리
-_FIG_POOL = ThreadPoolExecutor(max_workers=6)      # 한 쪽 안의 그림 설명 동시 처리 (쪽 풀과 분리해 서로 막지 않게)
+_POOL = ThreadPoolExecutor(max_workers=8)          # 쪽 단위 동시 처리 (AI 서버는 동시 16개까지 오류 없이 받았다)
+_FIG_POOL = ThreadPoolExecutor(max_workers=10)     # 한 쪽 안의 그림 설명·글 풀이 동시 처리 (쪽 풀과 분리해 서로 막지 않게)
 TASKS: dict[str, dict] = {}
 
 DEFAULTS = {"large": True, "contrast": False, "figures": True, "easy": False, "terms": False,
@@ -113,6 +113,23 @@ MIN_TEXT_FOR_AI = 25          # 한 쪽의 글이 이보다 짧으면 단어 뜻
 MAX_AI_FIGURES = 150          # 한 번의 변환에서 AI가 설명할 그림의 상한 (아주 큰 자료 하나가 크레딧을 한꺼번에 쓰지 않게)
 
 
+def _start_text_jobs(pg, o) -> dict:
+    """쪽의 글을 풀이하는 AI 호출(단어 뜻, 영어 용어)을 동시에 시작하고 {결과 키: 진행 중인 작업}을 돌려준다."""
+    items = _texts(pg)
+    if items and sum(len(t) for _, t in items) < MIN_TEXT_FOR_AI:        # 제목만 있는 쪽 등은 풀이할 것이 없으니 AI를 부르지 않는다 (크레딧 절약)
+        for key, want in (("easy_words", o["easy"]), ("terms", o["terms"])):
+            if want and pg.get(key) is None:
+                pg[key] = []
+        items = []
+    texts = [t for _, t in items]
+    running = {}
+    if o["easy"] and pg.get("easy_words") is None and items:
+        running["easy_words"] = _FIG_POOL.submit(enrich.easy_words, texts)
+    if o["terms"] and pg.get("terms") is None and items:
+        running["terms"] = _FIG_POOL.submit(enrich.english_terms, texts)
+    return running
+
+
 def _work_page(job, pg, o, budget: dict | None = None) -> bool:
     """쪽 하나를 처리한다. AI 호출이 하나라도 실패하면 True (그 부분은 완료로 기록하지 않아 다음에 다시 시도된다)."""
     failed = False
@@ -139,6 +156,7 @@ def _work_page(job, pg, o, budget: dict | None = None) -> bool:
     # 2) 그림 설명 (체크했을 때, 또는 스캔본이라 글자를 읽어야 할 때)
     ctx = (f"[과목: {course}] " if course else "") + " ".join(b.get("text", "") for b in pg["blocks"] if b["type"] in ("heading", "paragraph"))
     scanned = _scanned(pg)
+    early = None if scanned else _start_text_jobs(pg, o)        # 단어 뜻·영어 용어는 그림 설명을 기다리지 않고 동시에 시작한다 (스캔본은 읽어 낸 글이 생긴 뒤에)
     if o["figures"] or scanned:
         todo = [b for b in _figures(pg) if not b.get("ai_desc") and not (b.get("fullpage") and not scanned)]
         if budget is not None and todo:                     # 남은 그림 수만큼만 설명한다
@@ -161,24 +179,14 @@ def _work_page(job, pg, o, budget: dict | None = None) -> bool:
                                      for k, t in enumerate(fig["ai_desc"]["texts"]) if t.strip()]
             pg["ocr_done"] = True
     # 3) 쉬운 한국어 / 영어 병기
-    items = _texts(pg)
-    if items and sum(len(t) for _, t in items) < MIN_TEXT_FOR_AI:        # 제목만 있는 쪽 등은 풀이할 것이 없으니 AI를 부르지 않는다 (크레딧 절약)
-        for key, want in (("easy_words", o["easy"]), ("terms", o["terms"])):
-            if want and pg.get(key) is None:
-                pg[key] = []
-        items = []
-    if o["easy"] and pg.get("easy_words") is None and items:
-        res = enrich.easy_words([t for _, t in items])
+    if early is None:
+        early = _start_text_jobs(pg, o)
+    for key, fut in early.items():
+        res = fut.result()
         if res is None:
             failed = True
         else:
-            pg["easy_words"] = res
-    if o["terms"] and pg.get("terms") is None and items:
-        res = enrich.english_terms([t for _, t in items])
-        if res is None:
-            failed = True
-        else:
-            pg["terms"] = res
+            pg[key] = res
     return failed
 
 
