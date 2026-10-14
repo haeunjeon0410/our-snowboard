@@ -8,3 +8,5 @@ output/
 server/.cache/
 dist/
 .tmp_t/
+
+docs/
