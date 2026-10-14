@@ -15,7 +15,7 @@ BASE = "http://localhost:8790"
 SHOTS = [
     ("01_home", "/", 1280, 2300),
     ("02_home_panel", "/?demo=1", 1280, 900),
-    ("03_mock_course", "/mock?ext=1", 900, 260),
+    ("03_mock_course", "/mock?ext=1", 1000, 600),
     ("04_quality", "/quality", 1280, 1700),
     ("05_popup", "/ext/popup.html", 340, 300),
     ("06_mobile_home", ("iframe", "/", 390, 844), 700, 880),
