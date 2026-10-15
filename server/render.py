@@ -17,7 +17,7 @@ CSS = """
 [data-theme=hc]{--bg:#000;--fg:#ffe600;--mut:#fff;--line:#fff;--soft:#111;--acc:#fff;--mark:rgba(255,230,0,.28)}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:400 var(--fs)/1.9 'Pretendard Variable',Pretendard,-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;letter-spacing:-.01em;word-break:keep-all;overflow-wrap:anywhere}
-main{max-width:44em;margin:0 auto;padding:76px 24px 140px}
+main{max-width:44em;margin:0 auto;padding:76px 24px 190px}
 h1{font-size:1.3em;line-height:1.35;letter-spacing:-.03em;margin:0 0 .15em}
 .meta{color:var(--mut);font-size:.62em;margin:0 0 1.6em}
 h2,h3,h4{line-height:1.4;letter-spacing:-.025em;margin:1.3em 0 .3em}
@@ -43,23 +43,72 @@ footer{margin-top:3em;padding-top:1em;border-top:1px solid var(--line);color:var
 .bar{position:fixed;top:12px;right:12px;display:flex;gap:2px;padding:3px;background:color-mix(in srgb,var(--bg) 84%,transparent);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:11px;z-index:10;font:600 14px/1 'Pretendard Variable',Pretendard,'Malgun Gothic',sans-serif}
 .bar button{all:unset;cursor:pointer;padding:9px 12px;border-radius:8px;color:var(--fg)}
 .bar button:hover{background:var(--soft)}.bar button:focus-visible{outline:3px solid var(--acc)}
-@media print{.bar{display:none}main{padding-top:0}}
+.now{transition:background .25s,outline-color .25s}
+.pl{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);width:min(94vw,520px);padding:10px 14px 12px;background:color-mix(in srgb,var(--bg) 88%,transparent);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border:1px solid var(--line);border-radius:20px;box-shadow:0 10px 36px rgba(20,30,50,.2);z-index:20;font:600 14px/1 'Pretendard Variable',Pretendard,'Malgun Gothic',sans-serif;animation:plin .28s ease}
+.pl[hidden]{display:none}
+@keyframes plin{from{opacity:0;transform:translate(-50%,16px)}}
+.pl .trk{height:4px;border-radius:99px;background:var(--line);overflow:hidden;margin:0 2px 10px}
+.pl .trk i{display:block;height:100%;width:0;background:var(--acc);border-radius:99px;transition:width .3s}
+.pl .row{display:flex;align-items:center;gap:6px}
+.pl button,.pl select{all:unset;cursor:pointer;box-sizing:border-box;color:var(--fg);border-radius:10px}
+.pl button:focus-visible,.pl select:focus-visible{outline:3px solid var(--acc)}
+.pl .ic{width:40px;height:40px;display:grid;place-items:center}
+.pl .ic:hover,.pl .sm:hover,.pl select:hover{background:var(--soft)}
+.pl .ic svg{width:20px;height:20px;fill:currentColor}
+.pl .go{width:48px;height:48px;border-radius:99px;background:var(--acc);color:var(--bg)}
+.pl .go:hover{background:var(--acc);filter:brightness(1.12)}
+.pl .go svg{width:22px;height:22px}
+.pl .cnt{flex:1;text-align:center;color:var(--mut);font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pl .sm{padding:10px;min-width:48px;text-align:center;font-size:13px}
+.pl .vo{margin-top:8px;display:flex;align-items:center;gap:8px;color:var(--mut);font-size:12px;font-weight:500}
+.pl select{flex:1;min-width:0;padding:7px 10px;border:1px solid var(--line);font-size:12px;font-weight:500;text-overflow:ellipsis}
+.pl select option{color:#000}
+.bar .on{background:var(--soft)}
+@media (prefers-reduced-motion:reduce){.pl{animation:none}.pl .trk i,.now{transition:none}}
+@media print{.bar,.pl{display:none}main{padding-top:0}}
 """
 
-JS = """
+JS = r"""
 (()=>{const R=document.documentElement,K='osb:';const g=k=>{try{return localStorage.getItem(K+k)}catch(e){return null}},s=(k,v)=>{try{localStorage.setItem(K+k,v)}catch(e){}};
 const T=['light','dark','hc'];if(g('theme')&&T.includes(g('theme')))R.dataset.theme=g('theme');if(+g('fs'))R.style.setProperty('--fs',+g('fs')+'px');
-const fs=()=>parseFloat(getComputedStyle(R).getPropertyValue('--fs'))||22;let q=[],i=-1,on=false,rate=1;
-document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a;
+const fs=()=>parseFloat(getComputedStyle(R).getPropertyValue('--fs'))||22;
+const D=document,Q=x=>D.querySelector(x),syn=window.speechSynthesis,RATES=[.8,1,1.25,1.5];
+let q=[],i=-1,st='idle',gen=0,voices=[],rate=RATES.includes(+g('rate'))?+g('rate'):1,vname=g('voice')||'';
+const ICON={play:'<svg viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>',pause:'<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4.2" height="14" rx="1.2"/><rect x="13.8" y="5" width="4.2" height="14" rx="1.2"/></svg>'};
+D.addEventListener('click',e=>{const b=e.target.closest('[data-a]');
+if(b){const a=b.dataset.a;
 if(a==='bigger'||a==='smaller'){const v=Math.min(64,Math.max(14,fs()+(a==='bigger'?2:-2)));R.style.setProperty('--fs',v+'px');s('fs',v)}
 if(a==='theme'){const n=T[(T.indexOf(R.dataset.theme||'light')+1)%3];R.dataset.theme=n;s('theme',n)}
-if(a==='read'){on?stop():start()}});
-function start(){q=[...document.querySelectorAll('.r')];if(!q.length||!window.speechSynthesis)return;on=true;i=Math.max(0,q.findIndex(e=>e.getBoundingClientRect().top>60));say();set()}
-function stop(){on=false;speechSynthesis.cancel();document.querySelectorAll('.now').forEach(e=>e.classList.remove('now'));set()}
-function set(){const b=document.querySelector('[data-a=read]');if(b)b.textContent=on?'멈춤':'읽어 주기'}
-function say(){document.querySelectorAll('.now').forEach(e=>e.classList.remove('now'));if(!on||i>=q.length){stop();return}const el=q[i];el.classList.add('now');el.scrollIntoView({block:'center',behavior:'smooth'});
-const u=new SpeechSynthesisUtterance(el.dataset.s||el.innerText);u.lang='ko-KR';u.rate=rate;const v=speechSynthesis.getVoices().find(x=>/^ko/i.test(x.lang));if(v)u.voice=v;u.onend=()=>{if(on){i++;say()}};speechSynthesis.speak(u)}
-window.addEventListener('beforeunload',()=>speechSynthesis.cancel())})();
+if(a==='read')st==='idle'?open():close();
+if(a==='close')close();
+if(a==='play')st==='play'?pause():st==='pause'?resume():go(i<0?0:i);
+if(a==='prev')go(Math.max(0,i-1));
+if(a==='next')go(Math.min(q.length-1,i+1));
+if(a==='rate'){rate=RATES[(RATES.indexOf(rate)+1)%RATES.length];s('rate',rate);ui();if(st==='play')go(i)}return}
+const r=e.target.closest('.r');if(st!=='idle'&&r&&!e.target.closest('summary,a,button'))go(q.indexOf(r))});
+D.addEventListener('change',e=>{if(e.target.id!=='vsel')return;vname=e.target.value;s('voice',vname);if(st==='play')go(i)});
+D.addEventListener('keydown',e=>{if(e.key==='Escape'&&st!=='idle')close()});
+function score(v){const n=v.name;return(/natural|online|neural/i.test(n)?40:0)+(/google/i.test(n)?25:0)+(/sun-?hi|yuna|injoon|seoyeon|heami|flo|sandy/i.test(n)?10:0)+(v.localService?0:5)}
+function loadVoices(){if(!syn)return;voices=syn.getVoices().filter(v=>/^ko/i.test(v.lang)).sort((a,b)=>score(b)-score(a));const sel=Q('#vsel');if(!sel)return;
+sel.innerHTML=voices.length?voices.map(v=>'<option value="'+v.name.replace(/"/g,'&quot;')+'">'+v.name.replace(/^Microsoft |\s*Online \(Natural\)|\s*- Korean \(Korea\)/g,'').trim()+(score(v)>=40?' · 자연스러운 목소리':'')+'</option>').join(''):'<option>기본 목소리</option>';
+sel.disabled=!voices.length;if(voices.length)sel.value=voices.some(v=>v.name===vname)?vname:voices[0].name}
+function pick(){return voices.find(v=>v.name===vname)||voices[0]}
+function split(t){const out=[];let cur='';for(const p of t.replace(/\s+/g,' ').trim().split(/(?<=[.!?。…])\s+/)){if(cur&&(cur+p).length>110){out.push(cur);cur=p}else cur=cur?cur+' '+p:p}if(cur)out.push(cur);return out.length?out:[t]}
+function clearNow(){D.querySelectorAll('.now').forEach(e=>e.classList.remove('now'))}
+function ui(){const p=Q('[data-a=play]');if(!p)return;p.innerHTML=ICON[st==='play'?'pause':'play'];p.setAttribute('aria-label',st==='play'?'일시정지':'읽기');
+Q('[data-a=rate]').textContent=rate+'배속';Q('.pl .cnt').textContent=q.length?(Math.max(i,0)+1)+' / '+q.length:'';Q('.pl .trk i').style.width=q.length?((Math.max(i,0)+1)/q.length*100)+'%':'0';
+const b=Q('[data-a=read]');b.classList.toggle('on',st!=='idle');b.setAttribute('aria-expanded',st!=='idle')}
+function open(){if(!syn){alert('이 브라우저는 읽어 주기를 지원하지 않아요.');return}q=[...D.querySelectorAll('.r')];if(!q.length)return;loadVoices();Q('.pl').hidden=false;
+go(Math.max(0,q.findIndex(e=>e.getBoundingClientRect().top>60)))}
+function close(){gen++;syn&&syn.cancel();st='idle';clearNow();Q('.pl').hidden=true;ui()}
+function pause(){st='pause';syn.pause();ui()}
+function resume(){st='play';syn.resume();ui()}
+function go(n){gen++;syn.cancel();st='play';i=n;say()}
+function say(){clearNow();if(i<0||i>=q.length){close();return}const el=q[i],my=gen,parts=split(el.dataset.s||el.innerText);let k=0;
+el.classList.add('now');el.scrollIntoView({block:'center',behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'});ui();
+const next=()=>{if(my!==gen)return;if(k>=parts.length){i++;say();return}const u=new SpeechSynthesisUtterance(parts[k++]);u.lang='ko-KR';u.rate=rate;const v=pick();if(v)u.voice=v;u.onend=next;u.onerror=ev=>{if(ev.error!=='canceled'&&ev.error!=='interrupted')next()};syn.speak(u)};next()}
+if(syn){loadVoices();syn.addEventListener&&syn.addEventListener('voiceschanged',loadVoices)}
+window.addEventListener('beforeunload',()=>{syn&&syn.cancel()})})();
 """
 
 CODE_SYM = [("==", " 같다 "), ("!=", " 같지 않다 "), ("<=", " 작거나 같다 "), (">=", " 크거나 같다 "), ("&&", " 그리고 "), ("||", " 또는 "),
@@ -237,7 +286,14 @@ def to_html(doc: dict, job_dir: Path, o: dict, title: str = "") -> str:
     parts.append("<footer>Our Snowboard로 변환했어요. <span class=\"ai\" style=\"margin:0\">AI</span> 표시가 있는 내용은 AI가 만들었고 틀릴 수 있어요.</footer>")
     bar = ('<div class="bar" role="toolbar" aria-label="보기 도구"><button data-a="smaller" aria-label="글씨 작게">가-</button>'
            '<button data-a="bigger" aria-label="글씨 크게">가+</button><button data-a="theme" aria-label="색 테마 바꾸기">테마</button>'
-           '<button data-a="read">읽어 주기</button></div>')
+           '<button data-a="read" aria-controls="pl" aria-expanded="false">읽어 주기</button></div>'
+           '<div class="pl" id="pl" role="region" aria-label="읽어 주기 도구" hidden><div class="trk"><i></i></div><div class="row">'
+           '<button class="ic" data-a="prev" aria-label="이전 문단"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM9.5 12l9 6.5v-13z"/></svg></button>'
+           '<button class="ic go" data-a="play" aria-label="읽기"></button>'
+           '<button class="ic" data-a="next" aria-label="다음 문단"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM14.5 12l-9 6.5v-13z"/></svg></button>'
+           '<span class="cnt" aria-live="off"></span><button class="sm" data-a="rate" aria-label="읽는 속도 바꾸기">1배속</button>'
+           '<button class="ic" data-a="close" aria-label="읽어 주기 닫기"><svg viewBox="0 0 24 24"><path d="M6.4 5l12.6 12.6-1.4 1.4L5 6.4zM17.6 5l1.4 1.4L6.4 19 5 17.6z"/></svg></button></div>'
+           '<label class="vo">목소리<select id="vsel" aria-label="읽어 주는 목소리"></select></label></div>')
     return (f'<!doctype html><html lang="ko" data-theme="{theme}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
             f'<title>{_e(title or doc.get("title", ""))}</title><style>{CSS.replace("__FS__", fs)}</style></head>'
             f'<body>{bar}<main>{"".join(parts)}</main><script>{JS}</script></body></html>')
