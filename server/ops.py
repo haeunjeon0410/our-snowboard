@@ -252,7 +252,7 @@ def _summary(job, o) -> list[str]:
     if o["color"]:
         out.append(f"색으로 칠한 도식 {colored}개를 구분하기 쉽게 바꿨어요" if colored else "색으로 구분된 도식이 없어서 바꾼 곳은 없어요")
     if o["easy"]:
-        out.append(f"어려운 단어 {easy}개에 쉬운 말과 영어를 붙였어요" if easy else "풀이를 붙일 어려운 단어가 없었어요")
+        out.append(f"어려운 단어 {easy}개에 쉬운 말을 붙였어요" if easy else "풀이를 붙일 어려운 단어가 없었어요")
     if o["terms"]:
         out.append(f"전문 용어 {terms}개에 영어를 붙였어요" if terms else "영어를 붙일 전문 용어가 없었어요")
     if o["braille"]:
@@ -336,7 +336,7 @@ def _compares(job, o) -> list[dict]:
                 t, w = hit
                 i = t.find(w["ko"]) + len(w["ko"])
                 lo = max(0, i - 30)
-                add("단어 뜻", page=pg["n"], before=t[lo:i + 20], after=t[lo:i] + f"({w['easy']}{' · ' + w['en'] if w.get('en') else ''})" + t[i:i + 20])
+                add("단어 뜻", page=pg["n"], before=t[lo:i + 20], after=t[lo:i] + f"({w['easy']})" + t[i:i + 20])
                 break
     if o["terms"]:                                                  # 용어 → 용어(영어)
         for pg in doc["pages"]:

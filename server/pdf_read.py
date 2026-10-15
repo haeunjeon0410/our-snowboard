@@ -91,7 +91,7 @@ def _html(doc, job_dir: Path, o, title: str, tmp: Path) -> str:
     parts = [f"<h1>{e(title or doc.get('title', ''))}</h1>",
              f'<p class="meta">{e((doc.get("course") + " · ") if doc.get("course") else "")}{doc["n_pages"]}쪽</p>']
     if o["easy"] and any(p.get("easy_words") for p in doc["pages"]):
-        parts.append('<p class="cap"><span class="ai">AI</span> 어려운 단어 뒤에 쉬운 말과 영어를 괄호로 붙였어요. AI가 고른 풀이라 틀릴 수 있어요.</p>')
+        parts.append('<p class="cap"><span class="ai">AI</span> 어려운 단어 뒤에 쉬운 말을 괄호로 붙였어요. AI가 고른 풀이라 틀릴 수 있어요.</p>')
     prev_h = 1                                                       # 문서 제목이 h1이다
     for pg in doc["pages"]:
         words = pg.get("easy_words") if o["easy"] else None

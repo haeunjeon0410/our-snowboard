@@ -229,7 +229,7 @@ def _emph_html(text: str, phrases) -> str:
 
 def _with_terms(html_s: str, terms, used: set) -> str:
     for t in terms or []:
-        if t["ko"] in used or "we:" + t["ko"] in used:       # 단어 뜻에 이미 영어가 붙었으면 같은 영어를 한 번 더 붙이지 않는다
+        if t["ko"] in used:
             continue
         ke = _e(t["ko"])
         i = html_s.find(ke)
@@ -253,9 +253,7 @@ def _with_words(html_s: str, words, used: set) -> str:
         if i < 0 or html_s[i + len(ke):].startswith("("):
             continue
         used.add(key)
-        if w.get("en"):
-            used.add("we:" + w["ko"])
-        html_s = html_s[:i + len(ke)] + f'<span class="gl">({_e(w["easy"])}{" · " + _e(w["en"]) if w.get("en") else ""})</span>' + html_s[i + len(ke):]
+        html_s = html_s[:i + len(ke)] + f'<span class="gl">({_e(w["easy"])})</span>' + html_s[i + len(ke):]
     return html_s
 
 
@@ -318,7 +316,7 @@ def to_html(doc: dict, job_dir: Path, o: dict, title: str = "") -> str:
     parts = [f'<h1>{_e(title or doc.get("title", ""))}</h1>',
              f'<p class="meta">{_e((doc.get("course") + " · ") if doc.get("course") else "")}{doc["n_pages"]}쪽</p>']
     if o["easy"] and any(p.get("easy_words") for p in doc["pages"]):
-        parts.append('<p class="note"><span class="ai" style="margin:0">AI</span> 어려운 단어 뒤에 쉬운 말과 영어를 괄호로 붙였어요. AI가 고른 풀이라 틀릴 수 있어요.</p>')
+        parts.append('<p class="note"><span class="ai" style="margin:0">AI</span> 어려운 단어 뒤에 쉬운 말을 괄호로 붙였어요. AI가 고른 풀이라 틀릴 수 있어요.</p>')
     fixed = _fix_all(doc, job_dir, o)
     prev_h = 1                                                    # 문서 제목이 h1이다
     for pg in doc["pages"]:

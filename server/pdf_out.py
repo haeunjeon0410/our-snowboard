@@ -110,7 +110,7 @@ def _page_parts(pg, o) -> str:
         if rows:
             parts.append("<h2>그림 설명</h2>" + "".join(rows))
     if o["easy"] and pg.get("easy_words"):
-        parts.append("<h2>단어 뜻</h2>" + "".join(f"<p><b>{e(w['ko'])}</b> ({e(w['easy'])}{' · ' + e(w['en']) if w.get('en') else ''})</p>" for w in pg["easy_words"]))
+        parts.append("<h2>단어 뜻</h2>" + "".join(f"<p><b>{e(w['ko'])}</b> ({e(w['easy'])})</p>" for w in pg["easy_words"]))
     if o["terms"] and pg.get("terms"):
         parts.append("<h2>영어 용어</h2>" + "".join(f"<p><b>{e(t['ko'])}</b> ({e(t['en'])})</p>" for t in pg["terms"]))
     return "".join(parts)

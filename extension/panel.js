@@ -76,6 +76,7 @@
 .opt input:focus-visible{outline:2px solid rgba(58,71,93,.55);outline-offset:2px}
 .opt .l{font-size:14px;font-weight:550;line-height:1.4}
 .opt .s{grid-column:2;font-size:12.5px;color:#6b7689;line-height:1.45;margin-top:1px}
+.opt .ex{grid-column:2;font-size:12.5px;color:#6b7689;line-height:1.45}
 .opt.off{opacity:.5;cursor:not-allowed}.opt.off input{cursor:not-allowed}
 .tag{font-size:10.5px;font-weight:700;color:#5a6b88;background:#e4e9f1;border-radius:99px;padding:1px 7px;margin-top:2px}
 .sel{grid-column:2;margin-top:5px}
@@ -146,8 +147,8 @@
     { key: 'braille', label: '점자 파일도 받기', sub: '점자 프린터·단말기용 파일(.brf)도 함께 받아요' },
     { key: 'figures', label: '그림·도식을 글로 설명', sub: '그림이 무엇을 보여 주는지 글로 풀어 써요', ai: true, needs: 'figures', none: '이 자료에는 그림이 없어요' },
     { key: 'color', label: '색 구분 돕기', sub: n => `색으로 칠한 도식 ${n}개에 보정과 무늬를 넣어요`, needs: 'colorFigures', hideIfNone: true, select: true },
-    { key: 'easy', label: '어려운 단어 뜻', sub: '어려운 단어 뒤에 쉬운 말과 영어를 붙여요. 예: 용이하다(쉽다 · easy)', ai: true },
-    { key: 'terms', label: '영어 용어 함께', sub: '전문 용어 뒤에 영어를 붙여요. 예: 알고리즘(algorithm)', ai: true },
+    { key: 'easy', label: '어려운 단어 뜻', sub: '어려운 단어 뒤에 쉬운 말을 붙여요', ex: ['용이하다', '(쉽다)'], ai: true },
+    { key: 'terms', label: '영어 용어 함께', sub: '전문 용어 뒤에 영어를 붙여요', ex: ['알고리즘', '(algorithm)'], ai: true },
     { key: 'contrast', label: '고대비', sub: '검정 바탕에 밝은 글씨로 바꿔요' },
     { key: 'large', web: true, label: '큰 글씨', sub: '글씨와 줄 간격을 키워요. 웹 문서로 받아요' },
     { key: 'read', web: true, label: '소리로 읽어 주기', sub: '문서 안에 읽어 주기 버튼이 생겨요. 웹 문서로 받아요' }
@@ -159,7 +160,7 @@
     { id: 'read', label: '그림 읽기·점자', sub: '그림을 글로 설명하고 점자 파일도 받아요', set: { figures: true, braille: true }, ai: true },
     { id: 'low', label: '저시력', sub: '큰 글씨와 검정 바탕으로 바꾸고, 소리로 읽어 줘요', set: { large: true, contrast: true, read: true }, reflow: true },
     { id: 'color', label: '색각 이상', sub: '색이 칠해진 도식에 보정과 무늬를 넣어요', set: { color: true }, needs: 'colorFigures', none: '이 자료에는 색이 칠해진 도식이 없어요' },
-    { id: 'easy', label: '교환학생', sub: '어려운 단어와 전문 용어에 쉬운 말·영어를 붙여요', set: { easy: true, terms: true }, ai: true, reflow: true },
+    { id: 'easy', label: '교환학생', sub: '어려운 단어와 전문 용어에 쉬운 말·영어를 붙여요', set: { easy: true, terms: true }, ai: true },
     { id: 'custom', label: '직접 설정', custom: true }
   ];
   const SHORT = { read: '소리 읽기', large: '큰 글씨', contrast: '고대비', figures: '그림 설명', easy: '단어 뜻', terms: '영어 용어', color: '색 구분', pdf: 'PDF', readpdf: 'PDF', html: '웹 문서', braille: '점자' };
@@ -298,7 +299,7 @@
       }
       const subEl = h('span', { class: 's' });
       const el = h('label', { class: 'opt' + (extra ? ' ' + extra : '') }, input, h('span', { class: 'l' }, def.label), def.ai ? h('span', { class: 'tag' }, 'AI') : h('span'),
-        subEl, sel ? h('span', { class: 'sel' }, sel) : null);
+        subEl, def.ex ? h('span', { class: 'ex' }, '예: ' + def.ex[0] + def.ex[1]) : null, sel ? h('span', { class: 'sel' }, sel) : null);
       const update = () => {
         const off = unusable(def);
         input.disabled = off; input.checked = !off && !!opts[def.key] && !(def.web && !reflow()); el.classList.toggle('off', off);
