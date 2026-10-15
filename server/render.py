@@ -158,33 +158,20 @@ CODE_SYM = [("==", " 같다 "), ("!=", " 같지 않다 "), ("<=", " 작거나 �
             ("!", " 부정 "), ("%", " 나머지 "), (",", " 쉼표 "), (":", " 콜론 "), ('"', " 큰따옴표 "), ("'", " 작은따옴표 "), ("_", " 밑줄 ")]
 
 
-def _font_css(text: str) -> str:
-    """Pretendard를 문서 안에 넣는다. 이 문서에 쓰인 글자만 남겨서 용량을 줄이고, 실패하면 기기에 있는 글꼴로 대신한다."""
-    try:
-        from fontTools import subset
-        from fontTools.ttLib import TTFont
-        chars = set(re.sub(r"<[^>]+>", " ", _html.unescape(text))) | {chr(c) for c in range(0x20, 0x7F)} | set("·…“”‘’–—→←↑↓×÷≤≥≠≈○●■□▲△▶◀※")
-        key = hashlib.sha256("".join(sorted(chars)).encode("utf-8")).hexdigest()[:24]
-        cached = config.CACHE_DIR / "font" / (key + ".css")                 # 같은 글자 구성이면 다시 만들지 않는다 (만드는 데 몇 초 걸린다)
-        if cached.exists():
-            return cached.read_text(encoding="utf-8")
-        opts = subset.Options()
-        opts.flavor = "woff2"
-        opts.layout_features = ["*"]
-        font = TTFont(config.STATIC_DIR / "fonts" / "PretendardVariable.woff2")
-        sub = subset.Subsetter(opts)
-        sub.populate(text="".join(sorted(chars)))
-        sub.subset(font)
-        buf = io.BytesIO()
-        font.flavor = "woff2"
-        font.save(buf)
-        b64 = base64.b64encode(buf.getvalue()).decode()
-        css = "@font-face{font-family:'Pretendard Variable';font-weight:45 920;font-display:swap;src:url(data:font/woff2;base64," + b64 + ") format('woff2')}"
-        cached.parent.mkdir(parents=True, exist_ok=True)
-        cached.write_text(css, encoding="utf-8")
-        return css
-    except Exception:
-        return ""
+_FONT_CSS = None
+
+
+def _font_css() -> str:
+    """Pretendard를 문서 안에 넣는다. 한글 2,350자 등을 미리 깎아 둔 글꼴(eval/make_font_subset.py)을 쓴다.
+    변환할 때마다 그 문서에 쓰인 글자만 깎으면 글꼴 한 번에 8초~1분이 걸려서 이렇게 한다. 없거나 읽지 못하면 기기에 있는 글꼴로 대신한다."""
+    global _FONT_CSS
+    if _FONT_CSS is None:
+        try:
+            b64 = base64.b64encode((config.STATIC_DIR / "fonts" / "PretendardKS.woff2").read_bytes()).decode()
+            _FONT_CSS = "@font-face{font-family:'Pretendard Variable';font-weight:45 920;font-display:swap;src:url(data:font/woff2;base64," + b64 + ") format('woff2')}"
+        except OSError:
+            _FONT_CSS = ""
+    return _FONT_CSS
 
 
 def _e(s) -> str:
@@ -380,7 +367,7 @@ def to_html(doc: dict, job_dir: Path, o: dict, title: str = "") -> str:
            + '<i class="sp"></i>'.join(groups) + '</div></div></header>') if groups else ""
     body_html = "".join(parts)
     return (f'<!doctype html><html lang="ko" data-theme="{theme}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-            f'<title>{_e(title or doc.get("title", ""))}</title><style>{_font_css(body_html + bar + js + ''.join(tts.VOICES.values()))}{CSS.replace("__FS__", fs)}</style></head>'
+            f'<title>{_e(title or doc.get("title", ""))}</title><style>{_font_css()}{CSS.replace("__FS__", fs)}</style></head>'
             f'<body>{bar}<main>{body_html}</main><script>{js}</script></body></html>')
 
 

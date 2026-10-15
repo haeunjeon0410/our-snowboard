@@ -1,6 +1,9 @@
 """AI 작업: 띄어쓰기 복원, 그림 설명, 쉬운 한국어, 영어 용어. 모든 호출은 캐시되고, 체크한 항목에서만 부른다."""
+import io
 import json
 import re
+
+from PIL import Image
 
 from . import llm
 
@@ -52,12 +55,32 @@ JSON 객체 하나만 출력한다:
 규칙: 보이지 않는 것은 추측하지 말고, 글자가 흐리면 '읽기 어려움'이라고 쓴다. 전문 용어는 번역하지 않고 그대로 쓴다."""
 
 
+def _shrink(img_bytes: bytes, fullpage: bool) -> bytes:
+    """AI에 보내기 전에 그림을 줄인다. 큰 PNG는 올리는 데만 오래 걸리고 읽는 데 도움이 되지 않는다 (글자가 많은 쪽 전체는 조금 더 크게)."""
+    try:
+        im = Image.open(io.BytesIO(img_bytes))
+        limit = 1800 if fullpage else 1280
+        if max(im.size) <= limit and len(img_bytes) < 150_000:
+            return img_bytes
+        im = im.convert("RGB")
+        im.thumbnail((limit, limit))
+        jpg = io.BytesIO()
+        im.save(jpg, "JPEG", quality=88)
+        if len(jpg.getvalue()) < len(img_bytes) or max(Image.open(io.BytesIO(img_bytes)).size) > limit:
+            png = io.BytesIO()                                  # 단색에 가까운 그림은 PNG가 더 작다. 어느 쪽이든 줄인 크기로 보낸다 (큰 그림은 크기가 토큰을 좌우한다)
+            im.save(png, "PNG", optimize=True)
+            return jpg.getvalue() if len(jpg.getvalue()) <= len(png.getvalue()) else png.getvalue()
+        return img_bytes
+    except Exception:
+        return img_bytes
+
+
 def describe_figure(png_bytes: bytes, fig_kind: str, context: str, fullpage: bool) -> dict:
     kind = {"image": "그림", "diagram": "도식"}.get(fig_kind, "그림")
     note = ("이 이미지는 쪽 전체이다(스캔본일 수 있다). 본문 글자가 있으면 labels에 문단 단위로, 읽는 순서대로 빠짐없이 옮겨 적어라. 줄 끝에서 끊지 말고 문장을 이어서 한 문단으로 적는다.\n" if fullpage else "")
     try:
         res = llm.chat_json(FIG_PROMPT.format(kind=kind, page_note=note, context=context[:400] or "없음"),
-                            images=[png_bytes], max_tokens=1800 if fullpage else 700)
+                            images=[_shrink(png_bytes, fullpage)], max_tokens=1800 if fullpage else 700)
         if isinstance(res, list):
             res = res[0] if res else {}
         return {"desc": str(res.get("desc", "")), "texts": [str(t) for t in (res.get("labels") or [])][:60],
@@ -67,11 +90,11 @@ def describe_figure(png_bytes: bytes, fig_kind: str, context: str, fullpage: boo
 
 
 # ───────────── 쉬운 한국어 / 영어 병기 ─────────────
-EASYWORD_PROMPT = """다음은 대학 강의 자료의 문장들이다. 한국어가 서툰 교환학생(외국인 학생)이 막히는 어려운 단어를 골라, 단어 바로 뒤에 괄호로 붙일 쉬운 우리말 풀이와 영어 뜻을 적어라.
-- 한자어·문어체·학술적인 단어만 골라라. 일상에서 흔한 쉬운 단어(예: 기존, 비용, 방식)은 제외한다. (예: 용이하다 → 쉽다 / easy, 상이하다 → 다르다 / different, 점진적 → 조금씩 / gradual)
-- easy: 5글자 안팎의 짧은 쉬운 우리말 하나. en: 짧은 영어 단어나 구(소문자, 3단어 이내). 뜻이 바뀌면 안 된다.
+EASYWORD_PROMPT = """다음은 대학 강의 자료의 문장들이다. 한국어가 서툰 교환학생(외국인 학생)이 막히는 어려운 단어를 골라, 단어 바로 뒤에 괄호로 붙일 쉬운 우리말 풀이를 적어라.
+- 한자어·문어체·학술적인 단어만 골라라. 일상에서 흔한 쉬운 단어(예: 기존, 비용, 방식)은 제외한다. (예: 용이하다 → 쉽다, 상이하다 → 다르다, 점진적 → 조금씩)
+- easy: 5글자 안팎의 짧은 쉬운 우리말 하나. 뜻이 바뀌면 안 된다.
 - 단어(ko)은 문장에 나온 그대로의 표기여야 한다. 전문 용어(예: 신경관)는 제외한다.
-- 많아야 12개. JSON 배열 하나만 출력: [{{"ko": "용이하다", "easy": "쉽다", "en": "easy"}}]
+- 많아야 12개. JSON 배열 하나만 출력: [{{"ko": "용이하다", "easy": "쉽다"}}]
 
 입력:
 {payload}"""
@@ -96,10 +119,10 @@ def easy_words(texts: list[str]) -> list[dict] | None:
     for r in res if isinstance(res, list) else []:
         if not (isinstance(r, dict) and r.get("ko") and r.get("easy")):
             continue
-        ko, easy, en = str(r["ko"]).strip(), str(r["easy"]).strip(), str(r.get("en") or "").strip()
+        ko, easy = str(r["ko"]).strip(), str(r["easy"]).strip()
         if ko in joined and ko not in seen and 0 < len(easy) <= 14 and easy != ko:
             seen.add(ko)
-            out.append({"ko": ko, "easy": easy, "en": en[:30]})
+            out.append({"ko": ko, "easy": easy})
     return out[:12]
 
 
@@ -115,3 +138,45 @@ def english_terms(texts: list[str]) -> list[dict] | None:
         if isinstance(r, dict) and r.get("ko") and r.get("en") and r["ko"] in joined:
             out.append({"ko": str(r["ko"]), "en": str(r["en"])})
     return out[:15]
+
+
+BOTH_PROMPT = """다음은 대학 강의 자료의 문장들이다. 아래 두 가지를 한 번에 골라라.
+1) easy: 한국어가 서툰 교환학생이 막히는 어려운 단어(한자어·문어체·학술적인 단어)와 그 바로 뒤에 괄호로 붙일 5글자 안팎의 쉬운 우리말 하나. 일상에서 흔한 단어(예: 기존, 비용, 방식)와 전문 용어는 제외한다. 많아야 12개.
+2) terms: 영어를 함께 적어 주면 좋은 확실한 학술 전문 용어와 영어. 이미 괄호로 영어가 붙은 것, 일반 단어는 제외한다. 많아야 15개.
+- ko는 문장에 나온 그대로의 표기여야 한다. 뜻이 바뀌면 안 된다.
+- JSON 객체 하나만 출력: {{"easy": [{{"ko": "용이하다", "easy": "쉽다"}}], "terms": [{{"ko": "신경관", "en": "neural tube"}}]}}
+
+입력:
+{payload}"""
+
+
+def _clean_easy(res, joined: str) -> list[dict]:
+    out, seen = [], set()
+    for r in res if isinstance(res, list) else []:
+        if not (isinstance(r, dict) and r.get("ko") and r.get("easy")):
+            continue
+        ko, easy = str(r["ko"]).strip(), str(r["easy"]).strip()
+        if ko in joined and ko not in seen and 0 < len(easy) <= 14 and easy != ko:
+            seen.add(ko)
+            out.append({"ko": ko, "easy": easy})
+    return out[:12]
+
+
+def _clean_terms(res, joined: str) -> list[dict]:
+    out = []
+    for r in res if isinstance(res, list) else []:
+        if isinstance(r, dict) and r.get("ko") and r.get("en") and r["ko"] in joined:
+            out.append({"ko": str(r["ko"]), "en": str(r["en"])})
+    return out[:15]
+
+
+def words_and_terms(texts: list[str]) -> tuple[list[dict] | None, list[dict] | None]:
+    """(단어 뜻, 영어 용어). AI가 실패하면 둘 다 None (나중에 다시 시도할 수 있게)."""
+    try:
+        res = llm.chat_json(BOTH_PROMPT.format(payload=json.dumps(texts, ensure_ascii=False)), max_tokens=2200)
+    except Exception:
+        return None, None
+    if not isinstance(res, dict):
+        return None, None
+    joined = " ".join(texts)
+    return _clean_easy(res.get("easy"), joined), _clean_terms(res.get("terms"), joined)

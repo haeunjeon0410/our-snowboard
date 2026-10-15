@@ -54,9 +54,10 @@ def _cache_path(key: str):
     return config.CACHE_DIR / "llm" / (hashlib.sha256(key.encode("utf-8")).hexdigest()[:40] + ".json")
 
 
-def image_part(png_bytes: bytes) -> dict:
-    b64 = base64.b64encode(png_bytes).decode()
-    return {"type": "image_url", "image_url": {"url": "data:image/png;base64," + b64}}
+def image_part(img_bytes: bytes) -> dict:
+    mime = "image/jpeg" if img_bytes[:3] == b"\xff\xd8\xff" else "image/png"
+    b64 = base64.b64encode(img_bytes).decode()
+    return {"type": "image_url", "image_url": {"url": f"data:{mime};base64," + b64}}
 
 
 def chat(prompt: str, *, images=(), model=None, system=None, max_tokens=1500, cache_extra="") -> str:
@@ -87,13 +88,14 @@ def chat(prompt: str, *, images=(), model=None, system=None, max_tokens=1500, ca
             r = _get_client().chat.completions.create(
                 model=m, messages=messages, max_tokens=max_tokens, extra_body=extra)
             text = (r.choices[0].message.content or "").strip()
+            u = getattr(r, "usage", None)           # 사용량 정보를 안 주는 응답도 있다. 그 때문에 이미 받은 답을 버리고 다시 부르면 크레딧이 두 번 나간다
+            tin, tout = (getattr(u, "prompt_tokens", 0) or 0), (getattr(u, "completion_tokens", 0) or 0)
             with _lock:
                 usage_totals["calls"] += 1
-                usage_totals["input_tokens"] += r.usage.prompt_tokens
-                usage_totals["output_tokens"] += r.usage.completion_tokens
+                usage_totals["input_tokens"] += tin
+                usage_totals["output_tokens"] += tout
                 with open(config.CACHE_DIR / "usage.jsonl", "a", encoding="utf-8") as f:
-                    f.write(json.dumps({"t": time.time(), "model": m, "in": r.usage.prompt_tokens,
-                                        "out": r.usage.completion_tokens}) + "\n")
+                    f.write(json.dumps({"t": time.time(), "model": m, "in": tin, "out": tout}) + "\n")
             if text:
                 tmp = cp.with_suffix(f".{threading.get_ident()}.tmp")       # 두 곳에서 동시에 써도 반쪽 파일이 남지 않게
                 tmp.write_text(json.dumps({"text": text}, ensure_ascii=False), encoding="utf-8")

@@ -67,6 +67,7 @@ if not config.PUBLIC:
 def _startup():
     jobs.load_existing()
     jobs.prune_outputs()                              # 오래된 변환 결과 파일 정리
+    tts.prune()                                       # 오래된 읽어 주기 소리 파일 정리
     jobs.start_cleanup_loop(config.DATA_TTL_HOURS, also=lambda: ops.prune_tasks(config.DATA_TTL_HOURS * 3600))
 
 

@@ -69,3 +69,16 @@ def speak(text: str, voice: str) -> bytes:
     wav = _wav(r.content)
     path.write_bytes(wav)
     return wav
+
+
+def prune(days: float = 14.0) -> int:
+    """오래된 소리 파일을 지운다 (문장마다 하나씩 쌓여서 두면 디스크가 계속 찬다)."""
+    limit, n = time.time() - days * 86400, 0
+    for f in _dir.glob("*.wav"):
+        try:
+            if f.stat().st_mtime < limit:
+                f.unlink()
+                n += 1
+        except OSError:
+            pass
+    return n

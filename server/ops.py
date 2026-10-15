@@ -1,4 +1,5 @@
 """변환 작업: 자료 분석, 체크한 항목에 필요한 AI 작업만 실행, 결과 파일(웹 문서·점자) 만들기."""
+import json
 import re
 import threading
 import time
@@ -138,9 +139,13 @@ def _start_text_jobs(pg, o) -> dict:
         items = []
     texts = [t for _, t in items]
     running = {}
-    if o["easy"] and pg.get("easy_words") is None and items:
+    want_easy = o["easy"] and pg.get("easy_words") is None and items
+    want_terms = o["terms"] and pg.get("terms") is None and items
+    if want_easy and want_terms:                            # 둘 다 필요하면 같은 글을 두 번 보내지 않고 한 번에 묻는다
+        running["both"] = _FIG_POOL.submit(enrich.words_and_terms, texts)
+    elif want_easy:
         running["easy_words"] = _FIG_POOL.submit(enrich.easy_words, texts)
-    if o["terms"] and pg.get("terms") is None and items:
+    elif want_terms:
         running["terms"] = _FIG_POOL.submit(enrich.english_terms, texts)
     return running
 
@@ -198,6 +203,13 @@ def _work_page(job, pg, o, budget: dict | None = None) -> bool:
         early = _start_text_jobs(pg, o)
     for key, fut in early.items():
         res = fut.result()
+        if key == "both":
+            for k, v in zip(("easy_words", "terms"), res):
+                if v is None:
+                    failed = True
+                else:
+                    pg[k] = v
+            continue
         if res is None:
             failed = True
         else:
@@ -218,12 +230,21 @@ def _clean_options(raw: dict) -> dict:
     return o
 
 
+_START_LOCK = threading.Lock()
+
+
 def start(job, raw_options: dict, ai_ok: bool | None = None) -> str:
     o = _clean_options(raw_options)
     o["ai"] = llm.available() if ai_ok is None else ai_ok       # 이 요청이 AI를 써도 되는가 (접속 코드 확인 결과)
-    tid = uuid.uuid4().hex[:12]
-    TASKS[tid] = {"id": tid, "job": job["meta"]["id"], "status": "running", "done": 0, "total": 0, "step": "자료를 살펴보는 중",
-                  "files": [], "error": "", "note": "", "cancel": False, "failed": 0, "t": time.time(), "lock": threading.Lock()}
+    sig = json.dumps(o, sort_keys=True)
+    with _START_LOCK:
+        prune_tasks(6 * 3600)                                   # 끝난 지 오래된 작업 기록은 치운다 (로컬에서는 따로 치우는 곳이 없어 메모리가 계속 늘었다)
+        for t in TASKS.values():                                # 같은 자료를 같은 항목으로 이미 변환 중이면(더블 클릭·재시도) 새로 시작하지 않고 그 작업에 이어 붙는다
+            if t["status"] == "running" and t["job"] == job["meta"]["id"] and t.get("sig") == sig:
+                return t["id"]
+        tid = uuid.uuid4().hex[:12]
+        TASKS[tid] = {"id": tid, "job": job["meta"]["id"], "sig": sig, "status": "running", "done": 0, "total": 0, "step": "자료를 살펴보는 중",
+                      "files": [], "error": "", "note": "", "cancel": False, "failed": 0, "t": time.time(), "lock": threading.Lock()}
     threading.Thread(target=_run, args=(job, o, TASKS[tid]), daemon=True).start()
     return tid
 

@@ -46,6 +46,6 @@ def _num(name: str, cast, default=0):
 
 
 DAILY_AI_LIMIT = _num("DAILY_AI_LIMIT", int)         # 하루 AI 호출 상한 (0이면 제한 없음)
-DAILY_TTS_LIMIT = _num("DAILY_TTS_LIMIT", int)       # 하루 AI 목소리 문장 수 상한 (0이면 제한 없음)
+DAILY_TTS_LIMIT = _num("DAILY_TTS_LIMIT", int, 5000)       # 하루 AI 목소리 문장 수 상한 (기본 5000, 0이면 제한 없음). 같은 문장은 저장해 둔 소리를 쓰므로 세지 않는다
 DATA_TTL_HOURS = _num("DATA_TTL_HOURS", float)       # 올린 자료를 이 시간이 지나면 지운다 (0이면 안 지움)
 PUBLIC = bool(PUBLIC_URL)

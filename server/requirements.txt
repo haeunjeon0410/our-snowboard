@@ -6,4 +6,3 @@ numpy
 pillow
 fonttools
 pywin32; sys_platform == "win32"
-brotli
