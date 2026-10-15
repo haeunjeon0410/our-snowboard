@@ -86,7 +86,7 @@ footer{margin-top:3em;padding-top:1em;border-top:1px solid var(--line);color:var
 .pl input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:#fff;border:1px solid var(--bd2);box-shadow:0 1px 4px rgba(0,0,0,.3)}
 .pl .vs{-webkit-appearance:none;appearance:none;flex:1;min-width:0;height:34px;padding:0 30px 0 12px;border:1px solid var(--bd2);border-radius:9px;background:var(--sf) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23808a9c' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 11px center;color:var(--fg);box-shadow:var(--sh1);font:550 13px/1 inherit;font-family:inherit;cursor:pointer}
 .pl .vs:hover{background-color:var(--sf2)}
-.pl .vs option{color:#000}
+.pl .vs option{background:var(--sf);color:var(--fg)}
 .pl .spv{flex:none;min-width:52px;text-align:right;color:var(--fg);font-size:12.5px;font-variant-numeric:tabular-nums}
 .pl .nt{margin:0;color:var(--mut);font-size:12px;font-weight:500}
 @media (max-width:560px){.bar .in{padding:8px 12px}.bar .ttl{display:none}.bar .tools{flex:1;justify-content:space-between}.bar .cap{display:none}.bar .sp{margin:0 2px}.bar button{padding:0 10px}main{padding:24px 16px 64px}}
