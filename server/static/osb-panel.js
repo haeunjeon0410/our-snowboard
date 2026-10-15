@@ -341,7 +341,7 @@
       const el = h('button', { class: 'pre', type: 'button', role: 'radio', 'aria-checked': 'false', 'aria-disabled': off ? 'true' : null }, h('span', { class: 'rd' }), h('span', { class: 'l' }, pr.label), subEl);
       el.addEventListener('click', () => {
         if (off) return;
-        if (pr.custom && (!opts.custom || selectedId() === 'custom')) { openSheet(); return; }
+        if (pr.custom) { openSheet(); return; }      // 직접 설정은 지금 골라 둔 체크 그대로 열고, 예전에 저장해 둔 직접 설정을 덮어 씌우지 않는다
         const set = pr.custom ? opts.custom : pr.set, needReflow = pr.custom ? !!(opts.custom.large || opts.custom.read) : !!pr.reflow;
         applyContent(set);
         Object.assign(opts, needReflow ? { pdf: false, readpdf: false, html: true } : { pdf: true, readpdf: false, html: false });   // 웹 문서가 필요 없으면 기본(원본 PDF)으로

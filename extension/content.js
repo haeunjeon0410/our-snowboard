@@ -173,7 +173,7 @@ button:hover{background:#34496f}button.x{background:none;color:#6b7689;padding:0
       c.addEventListener('click', () => { picked.has(p.id) ? picked.delete(p.id) : picked.add(p.id); c.setAttribute('aria-pressed', String(picked.has(p.id))); showType(); if (fl && fl.first) save.disabled = !picked.size; });
       return c;
     });
-    const bub = el('div', { class: 'bub', role: 'dialog', 'aria-label': '변환 방식 선택' }, el('b', {}, '강의자료를 어떻게 바꿔 드릴까요?'),
+    const bub = el('div', { class: 'bub', role: 'dialog', 'aria-label': '변환 방식 선택' }, el('b', {}, '어떤 도움이 필요하세요?'),
       el('div', { class: 'chips', role: 'group' }, ...chips), el('div', { class: 'ft' }, more, csel, el('span', { class: 'sp' }), skip, save));
     const peek = el('button', { class: 'peek', type: 'button', 'aria-label': '변환 방식 열기', 'aria-expanded': 'false', title: '변환 방식' }, el('img', { src: url('mascot-peek.png'), alt: '' }));
     const grip = el('div', { class: 'grip', role: 'slider', tabindex: '0', 'aria-label': '말풍선 크기', 'aria-valuemin': '100', 'aria-valuemax': '220', 'aria-valuenow': '100', title: '끌어서 크기 조절 (두 번 누르면 원래 크기)' });
