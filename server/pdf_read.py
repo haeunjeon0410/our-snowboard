@@ -100,7 +100,7 @@ def _html(doc, job_dir: Path, o, title: str, tmp: Path) -> str:
         parts.append(f'<p class="pg">원본 {pg["n"]}쪽</p>')              # 원본 쪽 번호를 그대로 표시해 강의와 맞춰 볼 수 있게
 
         def text_of(obj, key):
-            h = render._emph_html(obj["text"], obj.get("emph")) if obj.get("emph") else e(obj["text"])
+            h = render._emph_html(obj["text"], obj.get("emph")) if (obj.get("emph") and o["color"]) else e(obj["text"])
             return _nb(render._with_terms(render._with_words(h, words, used), terms, used))
 
         for b in pg["blocks"]:

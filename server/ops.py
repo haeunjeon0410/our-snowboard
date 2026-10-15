@@ -20,6 +20,21 @@ DEFAULTS = {"read": False, "large": True, "contrast": False, "figures": True, "e
             "color": False, "colorType": "deutan", "braille": False,
             "pdf": True, "readpdf": False, "html": False,   # 받는 형식: 원본 PDF(기본) / 읽기용 PDF / 읽기용 웹 문서 / 점자
             "ai": True}   # 'ai'는 start()가 접속 코드를 확인해 정한다 (요청으로 받은 값은 쓰지 않는다)
+_FILE_TAGS = [("large", "큰글씨"), ("read", "소리읽기"), ("contrast", "고대비"), ("figures", "그림설명"),
+              ("easy", "쉬운말"), ("terms", "영어용어"), ("color", "색각이상"), ("braille", "점자")]
+
+
+def _file_tag(o) -> str:
+    """파일 이름 끝에 붙일 말: 고른 기능을 가운데 점(·)으로 이어 쓴다. 프리셋과 같으면 프리셋 이름."""
+    web = o["html"] or o["readpdf"]
+    on = [n for k, n in _FILE_TAGS if o.get(k) and (web or k not in ("large", "read"))]
+    if set(on) == {"큰글씨", "고대비", "소리읽기"}:
+        return "저시력"
+    if set(on) == {"쉬운말", "영어용어"}:
+        return "교환학생"
+    return "·".join(on) or "원본"
+
+
 TEXT_TYPES = ("paragraph", "heading", "list", "table")
 
 
@@ -424,17 +439,18 @@ def _run(job, o, task):
             o["pdf"], o["readpdf"], o["html"] = False, False, True
             task["note"] = (task["note"] + " / " if task["note"] else "") + "PDF를 만들 한글 글꼴이 없어 웹 문서로 만들었어요"
         brf_text = render.to_brf(doc, o) if o["braille"] else None
+        tag = _file_tag(o)
         if o["pdf"]:
-            pdf_path = out_dir / f"{base} (맞춤).pdf"
+            pdf_path = out_dir / f"{base} ({tag}).pdf"
             brf_att = (f"{base} (점자).brf", brf_text) if brf_text else None       # PDF 한 파일에도 점자가 들어 있게
             pdf_path.write_bytes(pdf_out.to_pdf(doc, jobs.job_dir(meta["id"]), o, title=title, brf=brf_att))
             files.append({"kind": "pdf", "name": pdf_path.name, "path": str(pdf_path)})
         if o["readpdf"]:
-            rp = out_dir / f"{base} (읽기용).pdf"
+            rp = out_dir / f"{base} ({tag}).pdf"
             rp.write_bytes(pdf_read.to_read_pdf(doc, jobs.job_dir(meta["id"]), o, title=title))
             files.append({"kind": "readpdf", "name": rp.name, "path": str(rp)})
         if o["html"]:
-            html_path = out_dir / f"{base} (읽기용).html"
+            html_path = out_dir / f"{base} ({tag}).html"
             html_path.write_text(render.to_html(doc, jobs.job_dir(meta["id"]), o, title=title), encoding="utf-8")
             files.append({"kind": "html", "name": html_path.name, "path": str(html_path)})
         if o["braille"]:

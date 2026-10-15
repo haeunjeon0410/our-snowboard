@@ -47,7 +47,7 @@ pre{background:#1d2230;color:#e6ebf4;padding:.9em 1.1em;border-radius:12px;overf
 footer{margin-top:3em;padding-top:1em;border-top:1px solid var(--line);color:var(--mut);font-size:.6em}
 .now{transition:background .25s,outline-color .25s}
 .bar{position:sticky;top:0;z-index:10;background:var(--mat);-webkit-backdrop-filter:saturate(1.6) blur(18px);backdrop-filter:saturate(1.6) blur(18px);border-bottom:1px solid var(--bd);font:550 14px/1 'Pretendard Variable',Pretendard,'Malgun Gothic',sans-serif}
-.bar .in{max-width:44em;margin:0 auto;padding:6px 24px;display:flex;align-items:center;gap:14px}
+.bar .in{padding:6px 24px;display:flex;align-items:center;gap:14px}
 .bar .ttl{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mut);font-size:13px;font-weight:600}
 .bar .tools{display:flex;align-items:center;gap:4px;flex:none}
 .bar .g{position:relative;display:flex;align-items:center;gap:4px}
@@ -326,7 +326,7 @@ def to_html(doc: dict, job_dir: Path, o: dict, title: str = "") -> str:
         parts.append(f'<section aria-label="{pg["n"]}쪽"><p class="pg r" data-s="{pg["n"]}쪽">{pg["n"]}쪽</p>')
 
         def text_of(obj, key, tag_ai=True):
-            h = _emph_html(obj["text"], obj.get("emph")) if obj.get("emph") else _e(obj["text"])
+            h = _emph_html(obj["text"], obj.get("emph")) if (obj.get("emph") and o["color"]) else _e(obj["text"])
             return _with_terms(_with_words(h, words, used), terms, used)
 
         for b in pg["blocks"]:
