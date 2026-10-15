@@ -106,16 +106,16 @@ D.addEventListener('click',e=>{const b=e.target.closest('[data-a]');
 if(b){const a=b.dataset.a;
 if(a==='bigger'||a==='smaller'){const v=Math.min(64,Math.max(14,fs()+(a==='bigger'?2:-2)));R.style.setProperty('--fs',v+'px');s('fs',v)}
 if(a==='theme'){const n=T[(T.indexOf(R.dataset.theme||'light')+1)%3];R.dataset.theme=n;s('theme',n);thl()}
-if(a==='read')st==='idle'?open():Q('.pl').hidden?unfold():fold();
+if(a==='read')Q('.pl').hidden?unfold():fold();
 if(a==='more'){const pl=Q('.pl'),o=!pl.classList.contains('open');pl.classList.toggle('open',o);b.setAttribute('aria-expanded',o);s('more',o?1:0)}
-if(a==='play')st==='play'?pause():st==='pause'?(redo?go(i):resume()):go(i<0?0:i);
+if(a==='play')st==='play'?pause():st==='pause'?(redo?go(i):resume()):begin();
 if(a==='prev')go(Math.max(0,i-1));
 if(a==='next')go(Math.min(q.length-1,i+1));
 return}
 const r=e.target.closest('.r');if(st!=='idle'&&!Q('.pl').hidden&&r&&!e.target.closest('summary,a,button'))go(q.indexOf(r))});
 D.addEventListener('input',e=>{if(e.target.id!=='rng')return;rate=clampR(e.target.value);s('rate',rate);ui();if(au)au.playbackRate=rate});
 D.addEventListener('change',e=>{if(e.target.id==='rng'){if(st==='play'&&!au)go(i);return}if(e.target.id!=='vsel')return;vname='ai:'+e.target.value;s('voice',e.target.value);aiFail=false;bad=0;note('');if(st!=='idle'){gen++;stopAu();syn&&syn.cancel();st='pause';redo=true;ui()}});
-D.addEventListener('keydown',e=>{if(e.key==='Escape'&&st!=='idle'&&!Q('.pl').hidden)fold()});
+D.addEventListener('keydown',e=>{if(e.key==='Escape'&&Q('.pl')&&!Q('.pl').hidden)fold()});
 function score(v){const n=v.name;return(/natural|online|neural/i.test(n)?40:0)+(/google/i.test(n)?25:0)+(/sun-?hi|yuna|injoon|seoyeon|heami|flo|sandy/i.test(n)?10:0)+(v.localService?0:5)}
 function loadVoices(){voices=(syn?syn.getVoices():[]).filter(v=>/^ko/i.test(v.lang)).sort((a,b)=>score(b)-score(a))}
 function useAi(){return vname.indexOf('ai:')===0&&!aiFail}
@@ -128,10 +128,9 @@ return out.flatMap(x=>{const r=[];while(x.length>160){let k=Math.max(x.lastIndex
 function clearNow(){D.querySelectorAll('.now').forEach(e=>e.classList.remove('now'))}
 function ui(){const p=Q('[data-a=play]');if(!p)return;p.innerHTML=ICON[st==='play'?'pause':'play'];p.setAttribute('aria-label',st==='play'?'일시정지':'읽기');
 const rg=Q('#rng');rg.value=rate;rg.style.setProperty('--p',(rate-.8)/.7*100+'%');Q('.spv').textContent=(+rate.toFixed(2))+'배속';const vs=Q('#vsel');if(vs.value!==vname.slice(3))vs.value=vname.slice(3);Q('.pl .cnt').textContent=q.length?(Math.max(i,0)+1)+' / '+q.length:'';
-const b=Q('[data-a=read]');const ex=st!=='idle'&&!Q('.pl').hidden;b.classList.toggle('on',ex);b.setAttribute('aria-expanded',ex)}
-function open(){note('');{const op=g('more')==='1';Q('.pl').classList.toggle('open',op);Q('[data-a=more]').setAttribute('aria-expanded',op)}q=[...D.querySelectorAll('.r')];if(!q.length)return;loadVoices();Q('.pl').hidden=false;
-go(Math.max(0,q.findIndex(e=>e.getBoundingClientRect().top>60)))}
-function close(){redo=false;gen++;stopAu();syn&&syn.cancel();st='idle';clearNow();Q('.pl').hidden=true;ui()}
+const b=Q('[data-a=read]');const ex=!Q('.pl').hidden;b.classList.toggle('on',ex);b.setAttribute('aria-expanded',ex)}
+function begin(){q=[...D.querySelectorAll('.r')];if(!q.length)return;note('');go(Math.max(0,q.findIndex(e=>e.getBoundingClientRect().top>60)))}
+function close(){redo=false;gen++;stopAu();syn&&syn.cancel();st='idle';i=-1;clearNow();ui()}
 function fold(){Q('.pl').hidden=true;if(st==='play')pause();ui()}
 function unfold(){Q('.pl').hidden=false;if(st==='pause')redo?go(i):resume();ui()}
 function pause(){st='pause';au?au.pause():syn.pause();ui()}
@@ -148,6 +147,7 @@ const a=au=new Audio(aiUrl(t));a.playbackRate=rate;a.onplaying=()=>{bad=0};a.one
 dev(t)};
 next()}
 loadVoices();if(syn&&syn.addEventListener)syn.addEventListener('voiceschanged',loadVoices)
+if(Q('.pl')){q=[...D.querySelectorAll('.r')];if(q.length){const op=g('more')==='1';Q('.pl').classList.toggle('open',op);Q('[data-a=more]').setAttribute('aria-expanded',op);ui()}else Q('.pl').hidden=true}
 window.addEventListener('beforeunload',()=>{stopAu();syn&&syn.cancel()})})();
 """
 
@@ -347,11 +347,11 @@ def to_html(doc: dict, job_dir: Path, o: dict, title: str = "") -> str:
     if o["contrast"]:
         groups.append('<div class="g" role="group" aria-label="화면 대비"><span class="cap">대비</span><button data-a="theme" id="thb">기본</button></div>')
     if o.get("read"):
-        groups.append('<div class="g" role="group" aria-label="읽어 주기"><button class="rd" data-a="read" aria-controls="pl" aria-expanded="false">'
+        groups.append('<div class="g" role="group" aria-label="읽어 주기"><button class="rd" data-a="read" aria-controls="pl" aria-expanded="true">'
                       '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5zM15 8.5a5 5 0 0 1 0 7M17.5 6a8.5 8.5 0 0 1 0 12" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>읽어 주기</button></div>')
     player = ""
     if o.get("read"):
-        player = ('<div class="pl" id="pl" role="region" aria-label="읽어 주기 도구" hidden><div class="pr">'
+        player = ('<div class="pl" id="pl" role="region" aria-label="읽어 주기 도구"><div class="pr">'
                   '<button class="ic" data-a="prev" aria-label="이전 문단"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM9.5 12l9 6.5v-13z"/></svg></button>'
                   '<button class="go" data-a="play" aria-label="읽기"></button>'
                   '<button class="ic" data-a="next" aria-label="다음 문단"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM14.5 12l-9 6.5v-13z"/></svg></button>'
