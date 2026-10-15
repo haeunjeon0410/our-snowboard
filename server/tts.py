@@ -12,10 +12,10 @@ from . import config
 
 # 고른 목소리 이름 → 화면에 보일 이름. 키는 Gemini TTS의 목소리 이름이다.
 VOICES = {
-    "Kore":   "수아 · 차분한 여성",
-    "Aoede":  "하린 · 밝은 여성",
-    "Charon": "도윤 · 낮고 차분한 남성",
-    "Puck":   "시우 · 경쾌한 남성",
+    "Kore":   "수아 (여·차분)",
+    "Aoede":  "하린 (여·밝음)",
+    "Charon": "도윤 (남·차분)",
+    "Puck":   "시우 (남·경쾌)",
 }
 MAX_CHARS = 400
 SAMPLE_RATE = 24000          # Gemini TTS는 24kHz 16비트 모노 PCM을 준다

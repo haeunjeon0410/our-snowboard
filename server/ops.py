@@ -16,7 +16,7 @@ _POOL = ThreadPoolExecutor(max_workers=12)         # 쪽 단위 동시 처리 (A
 _FIG_POOL = ThreadPoolExecutor(max_workers=20)     # 한 쪽 안의 그림 설명·글 풀이 동시 처리 (쪽 풀과 분리해 서로 막지 않게)
 TASKS: dict[str, dict] = {}
 
-DEFAULTS = {"large": True, "contrast": False, "figures": True, "easy": False, "terms": False,
+DEFAULTS = {"read": False, "large": True, "contrast": False, "figures": True, "easy": False, "terms": False,
             "color": False, "colorType": "deutan", "braille": False,
             "pdf": True, "readpdf": False, "html": False,   # 받는 형식: 원본 PDF(기본) / 읽기용 PDF / 읽기용 웹 문서 / 점자
             "ai": True}   # 'ai'는 start()가 접속 코드를 확인해 정한다 (요청으로 받은 값은 쓰지 않는다)
@@ -261,6 +261,8 @@ def _summary(job, o) -> list[str]:
         out.append("검정 바탕의 고대비로 바꿨어요")
     if o["large"] and (o["html"] or o["readpdf"]):
         out.append("큰 글씨로 다시 정리했어요")
+    if o.get("read") and o["html"]:
+        out.append("문서 안에 소리로 읽어 주기를 넣었어요")
     if not out:
         out.append("고른 항목이 없어서 원본 그대로 받았어요")
     return out[:7]

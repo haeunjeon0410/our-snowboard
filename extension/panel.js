@@ -141,7 +141,7 @@
 `;
 
   // 고를 수 있는 항목. info(자료 요약)에 따라 해당 없는 것은 숨기거나 끈다.
-  const DEFAULTS = { large: false, contrast: false, figures: false, easy: false, terms: false, color: false, colorType: 'deutan', pdf: true, readpdf: false, html: false, braille: false };
+  const DEFAULTS = { read: false, large: false, contrast: false, figures: false, easy: false, terms: false, color: false, colorType: 'deutan', pdf: true, readpdf: false, html: false, braille: false };
   const OPTIONS = [
     { key: 'braille', label: '점자 파일도 받기', sub: '점자 프린터·단말기용 파일(.brf)도 함께 받아요' },
     { key: 'figures', label: '그림·도식을 글로 설명', sub: '그림이 무엇을 보여 주는지 글로 풀어 써요', ai: true, needs: 'figures', none: '이 자료에는 그림이 없어요' },
@@ -149,19 +149,20 @@
     { key: 'easy', label: '어려운 단어 뜻', sub: '어려운 단어 뒤에 쉬운 말과 영어를 붙여요. 예: 용이하다(쉽다 · easy)', ai: true },
     { key: 'terms', label: '영어 용어 함께', sub: '전문 용어 뒤에 영어를 붙여요. 예: 알고리즘(algorithm)', ai: true },
     { key: 'contrast', label: '고대비', sub: '검정 바탕에 밝은 글씨로 바꿔요' },
-    { key: 'large', web: true, label: '큰 글씨', sub: '글씨와 줄 간격을 키워요. 웹 문서로 받아요' }
+    { key: 'large', web: true, label: '큰 글씨', sub: '글씨와 줄 간격을 키워요. 웹 문서로 받아요' },
+    { key: 'read', web: true, label: '소리로 읽어 주기', sub: '문서 안에 읽어 주기 버튼이 생겨요. 웹 문서로 받아요' }
   ];
-  const KEYS = ['pdf', 'readpdf', 'html', 'braille', 'figures', 'color', 'easy', 'terms', 'contrast', 'large'];
-  const C = ['braille', 'figures', 'color', 'easy', 'terms', 'contrast', 'large'];     // 내용 항목 (받는 형식과 별개)
+  const KEYS = ['pdf', 'readpdf', 'html', 'braille', 'figures', 'color', 'easy', 'terms', 'contrast', 'large', 'read'];
+  const C = ['braille', 'figures', 'color', 'easy', 'terms', 'contrast', 'large', 'read'];     // 내용 항목 (받는 형식과 별개)
   // 대부분은 이 중 하나만 누르면 끝나도록. 받는 형식은 오른쪽 위 드롭다운. '직접 설정'은 고른 항목을 저장해 둔다.
   const PRESETS = [
     { id: 'read', label: '그림 읽기·점자', sub: '그림을 글로 설명하고 점자 파일도 받아요', set: { figures: true, braille: true }, ai: true },
-    { id: 'low', label: '저시력', sub: '큰 글씨와 검정 바탕으로 바꾸고, 소리로 읽어 줘요', set: { large: true, contrast: true }, reflow: true },
+    { id: 'low', label: '저시력', sub: '큰 글씨와 검정 바탕으로 바꾸고, 소리로 읽어 줘요', set: { large: true, contrast: true, read: true }, reflow: true },
     { id: 'color', label: '색각 이상', sub: '색이 칠해진 도식에 보정과 무늬를 넣어요', set: { color: true }, needs: 'colorFigures', none: '이 자료에는 색이 칠해진 도식이 없어요' },
     { id: 'easy', label: '교환학생', sub: '어려운 단어와 전문 용어에 쉬운 말·영어를 붙여요', set: { easy: true, terms: true }, ai: true, reflow: true },
     { id: 'custom', label: '직접 설정', custom: true }
   ];
-  const SHORT = { large: '큰 글씨', contrast: '고대비', figures: '그림 설명', easy: '단어 뜻', terms: '영어 용어', color: '색 구분', pdf: 'PDF', readpdf: 'PDF', html: '웹 문서', braille: '점자' };
+  const SHORT = { read: '소리 읽기', large: '큰 글씨', contrast: '고대비', figures: '그림 설명', easy: '단어 뜻', terms: '영어 용어', color: '색 구분', pdf: 'PDF', readpdf: 'PDF', html: '웹 문서', braille: '점자' };
   // 예전에 저장된 설정(원본+웹 문서 같이 고르기 등)도 '원본 그대로 / 다시 정리' 둘 중 하나로 맞춘다.
   const normalize = (o) => { const r = { ...o }; if (r.pdf || !(r.readpdf || r.html)) { r.pdf = true; r.readpdf = false; r.html = false; } else { r.pdf = false; r.readpdf = false; r.html = true; } return r; };      // 받는 모양은 PDF / 웹 문서 둘뿐 (예전에 저장된 '읽기용 PDF'는 웹 문서로)
 
@@ -306,7 +307,7 @@
       };
       input.addEventListener('change', () => {
         opts[def.key] = input.checked;
-        if (def.web && input.checked && !reflow()) Object.assign(opts, { pdf: false, readpdf: false, html: true });   // 큰 글씨는 다시 정리한 형식에서만
+        if (def.web && input.checked && !reflow()) Object.assign(opts, { pdf: false, readpdf: false, html: true });   // 큰 글씨·소리 읽기는 다시 정리한 형식에서만
         syncAll();
       });
       updaters.push(update); update();
@@ -337,7 +338,7 @@
       el.addEventListener('click', () => {
         if (off) return;
         if (pr.custom && (!opts.custom || selectedId() === 'custom')) { openSheet(); return; }
-        const set = pr.custom ? opts.custom : pr.set, needReflow = pr.custom ? !!opts.custom.large : !!pr.reflow;
+        const set = pr.custom ? opts.custom : pr.set, needReflow = pr.custom ? !!(opts.custom.large || opts.custom.read) : !!pr.reflow;
         applyContent(set);
         Object.assign(opts, needReflow ? { pdf: false, readpdf: false, html: true } : { pdf: true, readpdf: false, html: false });   // 웹 문서가 필요 없으면 기본(원본 PDF)으로
         syncAll();
@@ -369,7 +370,7 @@
       titleEl.textContent = '직접 설정';
       const O = (k) => OPTIONS.find(d => d.key === k);
       body.append(h('div', { class: 'sh3' }, '넣을 항목을 골라 저장해요'),
-        h('div', { class: 'opts' }, ...['figures', 'easy', 'terms', 'contrast', 'color', 'braille', 'large'].map(k => optionRow(O(k)))));
+        h('div', { class: 'opts' }, ...['figures', 'easy', 'terms', 'contrast', 'color', 'braille', 'large', 'read'].map(k => optionRow(O(k)))));
       foot.append(h('button', { class: 'btn', type: 'button', onclick: () => sheetClose(false) }, '취소'), h('button', { class: 'btn pri', type: 'button', onclick: () => sheetClose(true) }, '저장'));
       syncAll();
       const f = root.querySelector('.opts input:not(:disabled)'); f && f.focus();
