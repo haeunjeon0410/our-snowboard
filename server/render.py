@@ -2,6 +2,7 @@
 import base64
 import html as _html
 import io
+import json
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -9,7 +10,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from . import color, outputs
+from . import color, config, outputs, tts
 
 CSS = """
 :root{--fs:__FS__;--bg:#fff;--fg:#1c2230;--mut:#6b7689;--line:#e1e6ee;--soft:#f2f4f8;--acc:#3f5a86;--mark:rgba(63,90,134,.14)}
@@ -62,7 +63,8 @@ footer{margin-top:3em;padding-top:1em;border-top:1px solid var(--line);color:var
 .pl .sm{padding:10px;min-width:48px;text-align:center;font-size:13px}
 .pl .vo{margin-top:8px;display:flex;align-items:center;gap:8px;color:var(--mut);font-size:12px;font-weight:500}
 .pl select{flex:1;min-width:0;padding:7px 10px;border:1px solid var(--line);font-size:12px;font-weight:500;text-overflow:ellipsis}
-.pl select option{color:#000}
+.pl select option,.pl select optgroup{color:#000}
+.pl .nt{margin:8px 0 0;color:var(--mut);font-size:12px;font-weight:500}
 .bar .on{background:var(--soft)}
 @media (prefers-reduced-motion:reduce){.pl{animation:none}.pl .trk i,.now{transition:none}}
 @media print{.bar,.pl{display:none}main{padding-top:0}}
@@ -72,8 +74,8 @@ JS = r"""
 (()=>{const R=document.documentElement,K='osb:';const g=k=>{try{return localStorage.getItem(K+k)}catch(e){return null}},s=(k,v)=>{try{localStorage.setItem(K+k,v)}catch(e){}};
 const T=['light','dark','hc'];if(g('theme')&&T.includes(g('theme')))R.dataset.theme=g('theme');if(+g('fs'))R.style.setProperty('--fs',+g('fs')+'px');
 const fs=()=>parseFloat(getComputedStyle(R).getPropertyValue('--fs'))||22;
-const D=document,Q=x=>D.querySelector(x),syn=window.speechSynthesis,RATES=[.8,1,1.25,1.5];
-let q=[],i=-1,st='idle',gen=0,voices=[],rate=RATES.includes(+g('rate'))?+g('rate'):1,vname=g('voice')||'';
+const AIV=__AIV__,TTS=location.protocol.indexOf('http')===0?'':'__TTS__',D=document,Q=x=>D.querySelector(x),syn=window.speechSynthesis,RATES=[.8,1,1.25,1.5];
+let q=[],i=-1,st='idle',gen=0,voices=[],au=null,aiFail=false,rate=RATES.includes(+g('rate'))?+g('rate'):1,vname=g('voice')||'ai:'+AIV[0][0];
 const ICON={play:'<svg viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>',pause:'<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4.2" height="14" rx="1.2"/><rect x="13.8" y="5" width="4.2" height="14" rx="1.2"/></svg>'};
 D.addEventListener('click',e=>{const b=e.target.closest('[data-a]');
 if(b){const a=b.dataset.a;
@@ -86,29 +88,38 @@ if(a==='prev')go(Math.max(0,i-1));
 if(a==='next')go(Math.min(q.length-1,i+1));
 if(a==='rate'){rate=RATES[(RATES.indexOf(rate)+1)%RATES.length];s('rate',rate);ui();if(st==='play')go(i)}return}
 const r=e.target.closest('.r');if(st!=='idle'&&r&&!e.target.closest('summary,a,button'))go(q.indexOf(r))});
-D.addEventListener('change',e=>{if(e.target.id!=='vsel')return;vname=e.target.value;s('voice',vname);if(st==='play')go(i)});
+D.addEventListener('change',e=>{if(e.target.id!=='vsel')return;vname=e.target.value;s('voice',vname);aiFail=false;if(st==='play')go(i)});
 D.addEventListener('keydown',e=>{if(e.key==='Escape'&&st!=='idle')close()});
 function score(v){const n=v.name;return(/natural|online|neural/i.test(n)?40:0)+(/google/i.test(n)?25:0)+(/sun-?hi|yuna|injoon|seoyeon|heami|flo|sandy/i.test(n)?10:0)+(v.localService?0:5)}
-function loadVoices(){if(!syn)return;voices=syn.getVoices().filter(v=>/^ko/i.test(v.lang)).sort((a,b)=>score(b)-score(a));const sel=Q('#vsel');if(!sel)return;
-sel.innerHTML=voices.length?voices.map(v=>'<option value="'+v.name.replace(/"/g,'&quot;')+'">'+v.name.replace(/^Microsoft |\s*Online \(Natural\)|\s*- Korean \(Korea\)/g,'').trim()+(score(v)>=40?' · 자연스러운 목소리':'')+'</option>').join(''):'<option>기본 목소리</option>';
-sel.disabled=!voices.length;if(voices.length)sel.value=voices.some(v=>v.name===vname)?vname:voices[0].name}
+function loadVoices(){voices=(syn?syn.getVoices():[]).filter(v=>/^ko/i.test(v.lang)).sort((a,b)=>score(b)-score(a));const sel=Q('#vsel');if(!sel)return;
+const esc=x=>x.replace(/"/g,'&quot;');
+sel.innerHTML='<optgroup label="AI 목소리 (자연스러워요)">'+AIV.map(v=>'<option value="ai:'+v[0]+'">'+v[1]+'</option>').join('')+'</optgroup>'
++'<optgroup label="이 기기 목소리">'+(voices.length?voices.map(v=>'<option value="'+esc(v.name)+'">'+v.name.replace(/^Microsoft |\s*Online \(Natural\)|\s*- Korean \(Korea\)/g,'').trim()+(score(v)>=40?' · 자연스러운 목소리':'')+'</option>').join(''):'<option value="">기본 목소리</option>')+'</optgroup>';
+sel.value=[...sel.options].some(o=>o.value===vname)?vname:AIV[0]?'ai:'+AIV[0][0]:''}
+function useAi(){return vname.indexOf('ai:')===0&&!aiFail}
+function aiUrl(t){return TTS+'/api/tts?v='+vname.slice(3)+'&t='+encodeURIComponent(t)}
+function stopAu(){if(au){au.onended=au.onerror=null;au.pause();au=null}}
+function note(m){const n=Q('.pl .nt');if(n){n.textContent=m;n.hidden=!m}}
 function pick(){return voices.find(v=>v.name===vname)||voices[0]}
 function split(t){const out=[];let cur='';for(const p of t.replace(/\s+/g,' ').trim().split(/(?<=[.!?。…])\s+/)){if(cur&&(cur+p).length>110){out.push(cur);cur=p}else cur=cur?cur+' '+p:p}if(cur)out.push(cur);return out.length?out:[t]}
 function clearNow(){D.querySelectorAll('.now').forEach(e=>e.classList.remove('now'))}
 function ui(){const p=Q('[data-a=play]');if(!p)return;p.innerHTML=ICON[st==='play'?'pause':'play'];p.setAttribute('aria-label',st==='play'?'일시정지':'읽기');
 Q('[data-a=rate]').textContent=rate+'배속';Q('.pl .cnt').textContent=q.length?(Math.max(i,0)+1)+' / '+q.length:'';Q('.pl .trk i').style.width=q.length?((Math.max(i,0)+1)/q.length*100)+'%':'0';
 const b=Q('[data-a=read]');b.classList.toggle('on',st!=='idle');b.setAttribute('aria-expanded',st!=='idle')}
-function open(){if(!syn){alert('이 브라우저는 읽어 주기를 지원하지 않아요.');return}q=[...D.querySelectorAll('.r')];if(!q.length)return;loadVoices();Q('.pl').hidden=false;
+function open(){note('');q=[...D.querySelectorAll('.r')];if(!q.length)return;loadVoices();Q('.pl').hidden=false;
 go(Math.max(0,q.findIndex(e=>e.getBoundingClientRect().top>60)))}
-function close(){gen++;syn&&syn.cancel();st='idle';clearNow();Q('.pl').hidden=true;ui()}
-function pause(){st='pause';syn.pause();ui()}
-function resume(){st='play';syn.resume();ui()}
-function go(n){gen++;syn.cancel();st='play';i=n;say()}
+function close(){gen++;stopAu();syn&&syn.cancel();st='idle';clearNow();Q('.pl').hidden=true;ui()}
+function pause(){st='pause';au?au.pause():syn.pause();ui()}
+function resume(){st='play';au?au.play():syn.resume();ui()}
+function go(n){gen++;stopAu();syn&&syn.cancel();st='play';i=n;say()}
 function say(){clearNow();if(i<0||i>=q.length){close();return}const el=q[i],my=gen,parts=split(el.dataset.s||el.innerText);let k=0;
 el.classList.add('now');el.scrollIntoView({block:'center',behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'});ui();
-const next=()=>{if(my!==gen)return;if(k>=parts.length){i++;say();return}const u=new SpeechSynthesisUtterance(parts[k++]);u.lang='ko-KR';u.rate=rate;const v=pick();if(v)u.voice=v;u.onend=next;u.onerror=ev=>{if(ev.error!=='canceled'&&ev.error!=='interrupted')next()};syn.speak(u)};next()}
-if(syn){loadVoices();syn.addEventListener&&syn.addEventListener('voiceschanged',loadVoices)}
-window.addEventListener('beforeunload',()=>{syn&&syn.cancel()})})();
+const next=()=>{if(my!==gen)return;if(k>=parts.length){i++;say();return}const t=parts[k++];
+if(useAi()){const nx=parts[k]||(q[i+1]&&(q[i+1].dataset.s||q[i+1].innerText));if(nx)fetch(aiUrl(split(nx)[0]),{mode:'no-cors'}).catch(()=>{});
+const a=au=new Audio(aiUrl(t));a.playbackRate=rate;a.onended=next;a.onerror=()=>{if(my!==gen)return;aiFail=true;note('AI 목소리를 쓸 수 없어 이 기기 목소리로 읽어요');k--;next()};a.play().catch(()=>{});return}
+const u=new SpeechSynthesisUtterance(t);u.lang='ko-KR';u.rate=rate;const v=pick();if(v)u.voice=v;u.onend=next;u.onerror=ev=>{if(ev.error!=='canceled'&&ev.error!=='interrupted')next()};syn.speak(u)};next()}
+loadVoices();if(syn&&syn.addEventListener)syn.addEventListener('voiceschanged',loadVoices)
+window.addEventListener('beforeunload',()=>{stopAu();syn&&syn.cancel()})})();
 """
 
 CODE_SYM = [("==", " 같다 "), ("!=", " 같지 않다 "), ("<=", " 작거나 같다 "), (">=", " 크거나 같다 "), ("&&", " 그리고 "), ("||", " 또는 "),
@@ -284,6 +295,8 @@ def to_html(doc: dict, job_dir: Path, o: dict, title: str = "") -> str:
                 parts.append(_figure_html(b, pg, job_dir, o, fixed))
         parts.append("</section>")
     parts.append("<footer>Our Snowboard로 변환했어요. <span class=\"ai\" style=\"margin:0\">AI</span> 표시가 있는 내용은 AI가 만들었고 틀릴 수 있어요.</footer>")
+    js = (JS.replace("__AIV__", json.dumps([[k, v] for k, v in tts.VOICES.items()], ensure_ascii=False))
+          .replace("__TTS__", config.PUBLIC_URL or f"http://localhost:{config.PORT}"))   # 내려받아 파일로 열어도 서버가 켜져 있으면 AI 목소리를 쓴다
     bar = ('<div class="bar" role="toolbar" aria-label="보기 도구"><button data-a="smaller" aria-label="글씨 작게">가-</button>'
            '<button data-a="bigger" aria-label="글씨 크게">가+</button><button data-a="theme" aria-label="색 테마 바꾸기">테마</button>'
            '<button data-a="read" aria-controls="pl" aria-expanded="false">읽어 주기</button></div>'
@@ -293,10 +306,10 @@ def to_html(doc: dict, job_dir: Path, o: dict, title: str = "") -> str:
            '<button class="ic" data-a="next" aria-label="다음 문단"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM14.5 12l-9 6.5v-13z"/></svg></button>'
            '<span class="cnt" aria-live="off"></span><button class="sm" data-a="rate" aria-label="읽는 속도 바꾸기">1배속</button>'
            '<button class="ic" data-a="close" aria-label="읽어 주기 닫기"><svg viewBox="0 0 24 24"><path d="M6.4 5l12.6 12.6-1.4 1.4L5 6.4zM17.6 5l1.4 1.4L6.4 19 5 17.6z"/></svg></button></div>'
-           '<label class="vo">목소리<select id="vsel" aria-label="읽어 주는 목소리"></select></label></div>')
+           '<label class="vo">목소리<select id="vsel" aria-label="읽어 주는 목소리"></select></label><p class="nt" hidden></p></div>')
     return (f'<!doctype html><html lang="ko" data-theme="{theme}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
             f'<title>{_e(title or doc.get("title", ""))}</title><style>{CSS.replace("__FS__", fs)}</style></head>'
-            f'<body>{bar}<main>{"".join(parts)}</main><script>{JS}</script></body></html>')
+            f'<body>{bar}<main>{"".join(parts)}</main><script>{js}</script></body></html>')
 
 
 def brf_bytes(text: str) -> bytes:

@@ -29,6 +29,7 @@ BASE_URL = os.environ.get("GATEWAY_BASE_URL", "https://factchat-cloud.mindlogic.
 # 비용을 아끼기 위해 가장 저렴한 모델을 기본으로 쓴다.
 TEXT_MODEL = os.environ.get("TEXT_MODEL", "gpt-6-luna")
 VISION_MODEL = os.environ.get("VISION_MODEL", "gpt-6-luna")
+TTS_MODEL = os.environ.get("TTS_MODEL", "gemini-3.1-flash-tts-preview")     # AI 목소리(읽어 주기)
 FALLBACK_MODEL = os.environ.get("FALLBACK_MODEL", "gemini-3.5-flash-lite")
 PORT = int(os.environ.get("PORT", "8790"))
 
@@ -45,5 +46,6 @@ def _num(name: str, cast, default=0):
 
 
 DAILY_AI_LIMIT = _num("DAILY_AI_LIMIT", int)         # 하루 AI 호출 상한 (0이면 제한 없음)
+DAILY_TTS_LIMIT = _num("DAILY_TTS_LIMIT", int)       # 하루 AI 목소리 문장 수 상한 (0이면 제한 없음)
 DATA_TTL_HOURS = _num("DATA_TTL_HOURS", float)       # 올린 자료를 이 시간이 지나면 지운다 (0이면 안 지움)
 PUBLIC = bool(PUBLIC_URL)

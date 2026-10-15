@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import config, convert_office, jobs, llm, ops
+from . import config, convert_office, jobs, llm, ops, tts
 
 app = FastAPI(title="Our Snowboard")
 
@@ -206,6 +206,23 @@ def task_file(tid: str, kind: str):
         raise HTTPException(404, "파일이 아직 없습니다")
     media = {"html": "text/html", "pdf": "application/pdf", "readpdf": "application/pdf"}.get(kind, "text/plain")
     return FileResponse(f["path"], media_type=media if media == "application/pdf" else media + "; charset=utf-8", filename=f["name"])
+
+
+# ───────────── 읽어 주기 (AI 목소리) ─────────────
+@app.get("/api/tts")
+async def tts_speak(request: Request, v: str = "Kore", t: str = ""):
+    """문장 하나를 소리로. <audio>가 바로 가져가도록 GET으로 둔다."""
+    if not ai_allowed(request):
+        raise HTTPException(403, "AI 목소리를 쓸 수 없어요")
+    try:
+        wav = await run_in_threadpool(tts.speak, t, v)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except RuntimeError as e:
+        raise HTTPException(429, str(e))
+    except Exception:
+        raise HTTPException(502, "AI 목소리를 만들지 못했어요")
+    return Response(wav, media_type="audio/wav", headers={"Cache-Control": "private, max-age=86400"})
 
 
 # ───────────── 사용량 / 측정표 ─────────────
