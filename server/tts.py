@@ -1,6 +1,7 @@
 """AI 목소리로 읽어 주기: 학교 AI API의 음성 합성(TTS)으로 문장을 소리(wav)로 만든다. 한 번 만든 소리는 디스크에 보관한다."""
 import hashlib
 import io
+import re
 import threading
 import time
 import wave
@@ -51,8 +52,8 @@ def _wav(pcm: bytes) -> bytes:
 
 def speak(text: str, voice: str) -> bytes:
     """문장 하나를 wav 바이트로. 잘못된 입력은 ValueError, 한도를 넘으면 RuntimeError."""
-    text = " ".join(text.split())
-    if voice not in VOICES or not text or len(text) > MAX_CHARS:
+    text = " ".join(re.sub(r"[^\w\s.,!?…~%:;·'\"-]", " ", text).split())     # 괄호·기호 같은 읽을 수 없는 글자는 빼야 모델이 소리를 만든다
+    if voice not in VOICES or not re.search(r"[0-9A-Za-z가-힣]", text) or len(text) > MAX_CHARS:
         raise ValueError("읽을 수 없는 요청이에요")
     if len(text) < 6 and not text.endswith((".", "!", "?")):
         text += "."                                  # '1쪽'처럼 아주 짧은 글은 모델이 소리를 만들지 못해서 문장 부호를 붙인다
