@@ -60,6 +60,9 @@
 .sh3{margin:0 0 4px 2px;font-size:13px;font-weight:650;color:#3a475d}
 .opts .opt{padding:8px 2px;align-items:start}.opts .opt+.opt{border-top:0}
 .opts .tag{margin:0}
+.opts.sl .opt{padding:2px 2px}
+.opts.sl .opt .sel{grid-column:3;grid-row:1 / span 2;align-self:center}
+.sh3.n{margin-top:6px}
 .sum{flex:1;min-width:0;margin-right:8px;font-size:12px;color:#6b7689;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .code{margin:12px 0 4px;padding:10px 12px;background:#eef1f5;border-radius:9px}
 .code label{display:block;font-size:12.5px;font-weight:600;color:#3a475d;margin-bottom:6px}
@@ -144,14 +147,14 @@
   // 고를 수 있는 항목. info(자료 요약)에 따라 해당 없는 것은 숨기거나 끈다.
   const DEFAULTS = { read: false, large: false, contrast: false, figures: false, easy: false, terms: false, color: false, colorType: 'deutan', pdf: true, readpdf: false, html: false, braille: false };
   const OPTIONS = [
-    { key: 'braille', label: '점자 파일도 받기', sub: '점자 프린터·단말기용 파일(.brf)도 함께 받아요' },
-    { key: 'figures', label: '그림·도식을 글로 설명', sub: '그림이 무엇을 보여 주는지 글로 풀어 써요', ai: true, needs: 'figures', none: '이 자료에는 그림이 없어요' },
-    { key: 'color', label: '색 구분 돕기', sub: n => `색으로 칠한 도식 ${n}개에 보정과 무늬를 넣어요`, needs: 'colorFigures', hideIfNone: true, select: true },
-    { key: 'easy', label: '어려운 단어 뜻', sub: '어려운 단어 뒤에 쉬운 말을 붙여요', ex: ['용이하다', '(쉽다)'], ai: true },
-    { key: 'terms', label: '영어 용어 함께', sub: '전문 용어 뒤에 영어를 붙여요', ex: ['알고리즘', '(algorithm)'], ai: true },
-    { key: 'contrast', label: '고대비', sub: '검정 바탕에 밝은 글씨로 바꿔요' },
-    { key: 'large', web: true, label: '큰 글씨', sub: '글씨와 줄 간격을 키워요. 웹 문서로 받아요' },
-    { key: 'read', web: true, label: '소리로 읽어 주기', sub: '문서 안에 읽어 주기 버튼이 생겨요. 웹 문서로 받아요' }
+    { key: 'braille', label: '점자 파일도 받기', sub: '점자 프린터용(.brf) 파일' },
+    { key: 'figures', label: '그림·도식을 글로 설명', sub: '그림이 무엇인지 글로 설명', ai: true, needs: 'figures', none: '이 자료에는 그림이 없어요' },
+    { key: 'color', label: '색 구분 돕기', sub: n => `색 도식 ${n}개에 보정·무늬`, needs: 'colorFigures', hideIfNone: true, select: true },
+    { key: 'easy', label: '어려운 단어 뜻', sub: '쉬운 말 붙이기 · 용이하다(쉽다)', ai: true },
+    { key: 'terms', label: '영어 용어 함께', sub: '영어 붙이기 · 알고리즘(algorithm)', ai: true },
+    { key: 'contrast', label: '고대비', sub: '검정 바탕에 밝은 글씨' },
+    { key: 'large', web: true, label: '큰 글씨', sub: '글씨와 줄 간격 키우기' },
+    { key: 'read', web: true, label: '소리로 읽어 주기', sub: '문서에 읽어 주기 버튼 넣기' }
   ];
   const KEYS = ['pdf', 'readpdf', 'html', 'braille', 'figures', 'color', 'easy', 'terms', 'contrast', 'large', 'read'];
   const C = ['braille', 'figures', 'color', 'easy', 'terms', 'contrast', 'large', 'read'];     // 내용 항목 (받는 형식과 별개)
@@ -298,7 +301,7 @@
         sel.addEventListener('change', () => { opts.colorType = sel.value; syncAll(); });
       }
       const subEl = h('span', { class: 's' });
-      const el = h('label', { class: 'opt' + (extra ? ' ' + extra : '') }, input, h('span', { class: 'l' }, def.label), def.ai ? h('span', { class: 'tag' }, 'AI') : h('span'),
+      const el = h('label', { class: 'opt' + (extra ? ' ' + extra : '') }, input, h('span', { class: 'l' }, def.label), def.ai ? h('span', { class: 'tag' }, 'AI') : def.web ? h('span', { class: 'tag', title: '웹 문서로 받아요' }, '웹') : h('span'),
         subEl, def.ex ? h('span', { class: 'ex' }, '예: ' + def.ex[0] + def.ex[1]) : null, sel ? h('span', { class: 'sel' }, sel) : null);
       const update = () => {
         const off = unusable(def);
@@ -370,8 +373,8 @@
       body.replaceChildren(); foot.replaceChildren(); updaters.length = 0; sumEl = null;
       titleEl.textContent = '직접 설정';
       const O = (k) => OPTIONS.find(d => d.key === k);
-      body.append(h('div', { class: 'sh3' }, '넣을 항목을 골라 저장해요'),
-        h('div', { class: 'opts' }, ...['figures', 'easy', 'terms', 'contrast', 'color', 'braille', 'large', 'read'].map(k => optionRow(O(k)))));
+      const group = (title, keys, extra) => [h('div', { class: 'sh3' + (extra ? ' n' : '') }, title), h('div', { class: 'opts sl' }, ...keys.map(k => optionRow(O(k))))];
+      body.append(...group('내용 더하기', ['figures', 'easy', 'terms', 'braille']), ...group('보기 편하게', ['contrast', 'color', 'large', 'read'], true));
       foot.append(h('button', { class: 'btn', type: 'button', onclick: () => sheetClose(false) }, '취소'), h('button', { class: 'btn pri', type: 'button', onclick: () => sheetClose(true) }, '저장'));
       syncAll();
       const f = root.querySelector('.opts input:not(:disabled)'); f && f.focus();
