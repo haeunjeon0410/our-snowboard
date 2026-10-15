@@ -108,13 +108,11 @@ button:hover{background:#34496f}button.x{background:none;color:#6b7689;padding:0
 
   // 떠 있는 마스코트: 처음에는 보드를 타고 들어와 방식을 묻고, 그 뒤에는 작은 버튼으로 남아 언제든 방식을 바꿀 수 있다.
   // 자세한 설정은 확장 프로그램 팝업에서 한다.
-  const PROFILE = [
-    { id: 'small', label: '큰 글씨', set: { large: true } },
-    { id: 'glare', label: '고대비', set: { contrast: true } },
-    { id: 'hard', label: '단어 뜻', set: { easy: true, terms: true } },
-    { id: 'figure', label: '그림 설명', set: { figures: true } },
-    { id: 'braille', label: '점자', set: { braille: true } },
-    { id: 'color', label: '색 구분', set: { color: true } }
+  const PROFILE = [      // 패널의 프리셋과 같은 이름·구성. 하나만 고르면 끝나게 하고, 하나씩 고르는 것은 세부 설정에서 한다.
+    { id: 'low', label: '저시력', set: { large: true, contrast: true, read: true } },
+    { id: 'read', label: '그림 읽기·점자', set: { figures: true, braille: true } },
+    { id: 'color', label: '색각 이상', set: { color: true } },
+    { id: 'easy', label: '교환학생', set: { easy: true, terms: true } }
   ];
   const FONT = "'OSB Pretendard','Pretendard Variable',Pretendard,'Malgun Gothic',sans-serif";
   const FL_CSS = `*{box-sizing:border-box;font-family:${FONT}}
@@ -124,7 +122,7 @@ button:hover{background:#34496f}button.x{background:none;color:#6b7689;padding:0
 .first .bub{animation-delay:.75s}
 .bub::after{content:'';position:absolute;right:46px;bottom:-6px;width:12px;height:12px;background:#fbfcfd;transform:rotate(45deg);box-shadow:3px 3px 4px rgba(20,35,60,.1)}
 .bub b{display:block;font-size:13px;font-weight:650;line-height:1.35;margin-bottom:11px;word-break:keep-all}
-.chips{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.chips{display:grid;grid-template-columns:1fr 1fr;gap:7px}
 .chip{all:unset;box-sizing:border-box;text-align:center;padding:5px 2px;border-radius:99px;background:#eceff4;color:#3a475d;font:550 12px/1.2 ${FONT};cursor:pointer}
 .chip:hover{background:#e0e6ef}.chip[aria-pressed=true]{background:#4a6794;color:#fff}.chip:focus-visible{outline:2px solid rgba(58,71,93,.55);outline-offset:2px}
 .ft{display:flex;align-items:center;justify-content:flex-end;gap:2px;margin-top:10px}.ft .sp{flex:1}
@@ -252,9 +250,9 @@ button:hover{background:#34496f}button.x{background:none;color:#6b7689;padding:0
     });
     save.addEventListener('click', async () => {
       if (!alive()) { staleNotice(); return; }
-      const o = { ...D, ...(saved.opts || {}), pdf: true, readpdf: false, html: false, large: false, contrast: false, figures: false, color: false, easy: false, terms: false, braille: false, profile: true };
+      const o = { ...D, ...(saved.opts || {}), pdf: true, readpdf: false, html: false, large: false, read: false, contrast: false, figures: false, color: false, easy: false, terms: false, braille: false, profile: true };
       for (const p of PROFILE) if (picked.has(p.id)) Object.assign(o, p.set);
-      if (o.large) Object.assign(o, { pdf: false, html: true });          // 큰 글씨는 다시 정리한 웹 문서에서만 (고대비는 원본 PDF에서도 된다)
+      if (o.large || o.read) Object.assign(o, { pdf: false, html: true });          // 큰 글씨·소리 읽기는 웹 문서에서만 (나머지는 원본 PDF에서도 된다)
       o.colorType = csel.value;
       saved.opts = o;
       try { await store.set({ opts: o, onboarded: true, profileIds: [...picked] }); } catch (e) { /* 무시 */ }

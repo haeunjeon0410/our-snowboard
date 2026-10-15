@@ -14,9 +14,9 @@ from PIL import Image
 from . import color, config, outputs, tts
 
 CSS = """
-:root{--fs:__FS__;--bg:#fff;--fg:#1c2230;--mut:#6b7689;--line:#e1e6ee;--soft:#f2f4f8;--acc:#0b63d9;--mark:rgba(11,99,217,.12);
+:root{--fs:__FS__;--bg:#fff;--fg:#1c2230;--mut:#6b7689;--line:#e1e6ee;--soft:#f2f4f8;--acc:#3f5a86;--mark:rgba(63,90,134,.14);
 --sf:#fff;--sf2:#eef1f5;--sf3:#e3e8ee;--mat:rgba(250,251,253,.78);--bd:rgba(20,35,60,.11);--bd2:rgba(20,35,60,.2);--pri:#0b63d9;--prih:#0a54b8;--pris:rgba(11,99,217,.09);--prik:#0a4fb0;--onp:#fff;--sh:0 6px 20px rgba(20,35,60,.1),0 1px 3px rgba(20,35,60,.07);--sh1:0 .5px 1px rgba(20,35,60,.08)}
-[data-theme=dark]{--bg:#16181d;--fg:#eef1f6;--mut:#9aa5b8;--line:#2f3541;--soft:#222630;--acc:#4d9bff;--mark:rgba(77,155,255,.2);
+[data-theme=dark]{--bg:#16181d;--fg:#eef1f6;--mut:#9aa5b8;--line:#2f3541;--soft:#222630;--acc:#9bb8e8;--mark:rgba(155,184,232,.2);
 --sf:#202329;--sf2:#2a2e36;--sf3:#363b45;--mat:rgba(32,35,41,.78);--bd:rgba(255,255,255,.1);--bd2:rgba(255,255,255,.2);--pri:#4d9bff;--prih:#74b1ff;--pris:rgba(77,155,255,.16);--prik:#8cc0ff;--onp:#06182f;--sh:0 8px 24px rgba(0,0,0,.45);--sh1:0 .5px 1px rgba(0,0,0,.5)}
 [data-theme=hc]{--bg:#000;--fg:#ffe600;--mut:#fff;--line:#fff;--soft:#111;--acc:#fff;--mark:rgba(255,230,0,.28);
 --sf:#000;--sf2:#141414;--sf3:#222;--mat:#000;--bd:#fff;--bd2:#fff;--pri:#ffe14d;--prih:#fff08a;--pris:#1d1a00;--prik:#ffe14d;--onp:#000;--sh:none;--sh1:none}
