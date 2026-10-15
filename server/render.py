@@ -99,7 +99,7 @@ JS = r"""
 const T=['light','dark','hc'];if(g('theme')&&T.includes(g('theme')))R.dataset.theme=g('theme');if(+g('fs'))R.style.setProperty('--fs',+g('fs')+'px');
 const fs=()=>parseFloat(getComputedStyle(R).getPropertyValue('--fs'))||22;
 const AIV=__AIV__,TTS=location.protocol.indexOf('http')===0?'':'__TTS__',D=document,Q=x=>D.querySelector(x),syn=window.speechSynthesis,clampR=x=>Math.min(1.5,Math.max(.8,+x||1));
-let q=[],i=-1,st='idle',gen=0,voices=[],au=null,aiFail=false,redo=false,bad=0,rate=clampR(g('rate')),vname='ai:'+(AIV.some(v=>v[0]===g('voice'))?g('voice'):AIV[0][0]);
+let q=[],i=-1,ck=0,cparts=[],vtok=0,st='idle',gen=0,voices=[],au=null,aiFail=false,redo=false,bad=0,rate=clampR(g('rate')),vname='ai:'+(AIV.some(v=>v[0]===g('voice'))?g('voice'):AIV[0][0]);
 const ICON={play:'<svg viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>',pause:'<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4.2" height="14" rx="1.2"/><rect x="13.8" y="5" width="4.2" height="14" rx="1.2"/></svg>'};
 const TN={light:'기본',dark:'어둡게',hc:'고대비'};function thl(){const b=Q('#thb'),n=R.dataset.theme||'light';if(b){b.textContent=TN[n];b.setAttribute('aria-label','화면 대비 바꾸기, 지금은 '+TN[n])}}thl();
 D.addEventListener('click',e=>{const b=e.target.closest('[data-a]');
@@ -108,13 +108,15 @@ if(a==='bigger'||a==='smaller'){const v=Math.min(64,Math.max(14,fs()+(a==='bigge
 if(a==='theme'){const n=T[(T.indexOf(R.dataset.theme||'light')+1)%3];R.dataset.theme=n;s('theme',n);thl()}
 if(a==='read')Q('.pl').hidden?unfold():fold();
 if(a==='more'){const pl=Q('.pl'),o=!pl.classList.contains('open');pl.classList.toggle('open',o);b.setAttribute('aria-expanded',o);s('more',o?1:0)}
-if(a==='play')st==='play'?pause():st==='pause'?(redo?go(i):resume()):begin();
+if(a==='play')st==='play'?pause():st==='pause'?(redo?go(i,ck):resume()):begin();
 if(a==='prev')go(Math.max(0,i-1));
 if(a==='next')go(Math.min(q.length-1,i+1));
 return}
 const r=e.target.closest('.r');if(st!=='idle'&&!Q('.pl').hidden&&r&&!e.target.closest('summary,a,button'))go(q.indexOf(r))});
 D.addEventListener('input',e=>{if(e.target.id!=='rng')return;rate=clampR(e.target.value);s('rate',rate);ui();if(au)au.playbackRate=rate});
-D.addEventListener('change',e=>{if(e.target.id==='rng'){if(st==='play'&&!au)go(i);return}if(e.target.id!=='vsel')return;vname='ai:'+e.target.value;s('voice',e.target.value);aiFail=false;bad=0;note('');if(st!=='idle'){gen++;stopAu();syn&&syn.cancel();st='pause';redo=true;ui()}});
+D.addEventListener('change',e=>{if(e.target.id==='rng'){if(st==='play'&&!au)go(i);return}if(e.target.id!=='vsel')return;vname='ai:'+e.target.value;s('voice',e.target.value);aiFail=false;bad=0;note('');
+if(st==='play'){const tok=++vtok,si=i,sk=ck,t=cparts[ck];if(t){note('새 목소리를 준비하는 중…');const t2=cparts[ck+1];if(t2)fetch(aiUrl(t2),{mode:'no-cors'}).catch(()=>{});fetch(aiUrl(t),{mode:'no-cors'}).catch(()=>{}).then(()=>{if(tok!==vtok)return;note('');if(st==='play'&&i===si&&ck===sk)go(i,ck)})}}
+else if(st==='pause')redo=true;});
 D.addEventListener('keydown',e=>{if(e.key==='Escape'&&Q('.pl')&&!Q('.pl').hidden)fold()});
 function score(v){const n=v.name;return(/natural|online|neural/i.test(n)?40:0)+(/google/i.test(n)?25:0)+(/sun-?hi|yuna|injoon|seoyeon|heami|flo|sandy/i.test(n)?10:0)+(v.localService?0:5)}
 function loadVoices(){voices=(syn?syn.getVoices():[]).filter(v=>/^ko/i.test(v.lang)).sort((a,b)=>score(b)-score(a))}
@@ -132,16 +134,16 @@ const b=Q('[data-a=read]');const ex=!Q('.pl').hidden;b.classList.toggle('on',ex)
 function begin(){q=[...D.querySelectorAll('.r')];if(!q.length)return;note('');go(Math.max(0,q.findIndex(e=>e.getBoundingClientRect().top>60)))}
 function close(){redo=false;gen++;stopAu();syn&&syn.cancel();st='idle';i=-1;clearNow();ui()}
 function fold(){Q('.pl').hidden=true;if(st==='play')pause();ui()}
-function unfold(){Q('.pl').hidden=false;if(st==='pause')redo?go(i):resume();ui()}
+function unfold(){Q('.pl').hidden=false;if(st==='pause')redo?go(i,ck):resume();ui()}
 function pause(){st='pause';au?au.pause():syn.pause();ui()}
 function resume(){st='play';au?au.play():syn.resume();ui()}
-function go(n){redo=false;gen++;stopAu();syn&&syn.cancel();st='play';i=n;say()}
+function go(n,k0){redo=false;gen++;stopAu();syn&&syn.cancel();st='play';i=n;say(k0||0)}
 function reveal(el){const br=Q('.bar'),pl=Q('.pl'),t=Math.max(br?br.getBoundingClientRect().bottom:0,pl&&!pl.hidden?pl.getBoundingClientRect().bottom:0)+12,b=innerHeight-16,r=el.getBoundingClientRect();
 if(r.top>=t&&r.bottom<=b)return;const room=b-t,y=r.height>=room?r.top-t:r.top-t-(room-r.height)/2;scrollBy({top:y,behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'})}
-function say(){clearNow();if(i<0||i>=q.length){close();return}const el=q[i],my=gen,parts=split(el.dataset.s||el.innerText);let k=0;
+function say(k0){clearNow();if(i<0||i>=q.length){close();return}const el=q[i],my=gen,parts=split(el.dataset.s||el.innerText);let k=k0||0;
 el.classList.add('now');reveal(el);ui();
 const dev=t=>{if(!syn){next();return}const u=new SpeechSynthesisUtterance(t);u.lang='ko-KR';u.rate=rate;const v=pick();if(v)u.voice=v;u.onend=next;u.onerror=ev=>{if(ev.error!=='canceled'&&ev.error!=='interrupted')next()};syn.speak(u)};
-const next=()=>{if(my!==gen)return;if(k>=parts.length){i++;say();return}const t=parts[k++];
+const next=()=>{if(my!==gen)return;if(k>=parts.length){i++;say();return}const t=parts[k++];ck=k-1;cparts=parts;
 if(useAi()){const nx=parts[k]||(q[i+1]&&split(q[i+1].dataset.s||q[i+1].innerText)[0]);if(nx)fetch(aiUrl(nx),{mode:'no-cors'}).catch(()=>{});
 const a=au=new Audio(aiUrl(t));a.playbackRate=rate;a.onplaying=()=>{bad=0};a.onended=next;a.onerror=()=>{if(my!==gen)return;au=null;if(++bad>=3){aiFail=true;note('AI 목소리 서버에 연결되지 않아 이 기기 목소리로 읽어요')}dev(t)};a.play().catch(()=>{});return}
 dev(t)};
