@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pymupdf
 
-from . import render
+from . import render, tagger
 
 _FONT_CANDIDATES = [
     ("NanumGothic.ttf", "NanumGothicBold.ttf"),
@@ -106,6 +106,8 @@ def _page_parts(pg, o) -> str:
                 row += f" <b>색 설명</b> {e(note)}"
             if inner:
                 row += f"<br><span class=\"sub\">그림 속 글자: {e(', '.join(inner))}</span>"
+            if render.needs_check(b):
+                row += f"<br><b>{e(render.WARN_TEXT)}</b>"
             rows.append(row + "</p>")
         if rows:
             parts.append("<h2>그림 설명</h2>" + "".join(rows))
@@ -211,7 +213,10 @@ def to_pdf(doc: dict, job_dir: Path, o: dict, title: str = "", brf: tuple | None
     if not fonts:
         raise RuntimeError("PDF에 글자를 더할 한글 글꼴(나눔고딕 등)이 서버에 없어요")
     fontfile = os.path.join(fonts[0], fonts[1])
-    out = pymupdf.open(str(job_dir / "original.pdf"))
+    base = job_dir / "original.pdf"
+    tagged = tagger.tag(base, job_dir) if (o.get("tagged", True) and tagger.available()) else None      # 구조 태그를 단 PDF (Java가 없거나 실패하면 None → 원본 그대로)
+    out = pymupdf.open(str(tagged or base))
+    tagged_ids = tagger.apply_alts(out, doc, o) if (tagged and o["figures"]) else set()                # 그림 설명을 Alt로 넣은 그림 (이 그림은 숨은 글자를 또 얹지 않는다)
     fixed = render._fix_all(doc, job_dir, o) if o["color"] else {}
 
     for pg in doc["pages"]:
@@ -243,7 +248,7 @@ def to_pdf(doc: dict, job_dir: Path, o: dict, title: str = "", brf: tuple | None
                 page.insert_image(rect, stream=buf.getvalue(), overlay=True)
             if o["figures"]:
                 desc, inner, note = _fig_texts(b)
-                if desc:
+                if desc and b["id"] not in tagged_ids:
                     text = f"그림 설명. {desc}"
                     if note:
                         text += f" 색 설명. {note}"
@@ -312,6 +317,10 @@ def to_pdf(doc: dict, job_dir: Path, o: dict, title: str = "", brf: tuple | None
         out.subset_fonts()                                           # 쓴 글자만 남겨 글꼴 용량을 줄인다
     except Exception:
         pass
-    data = out.tobytes(garbage=3, deflate=True)
+    pymupdf.TOOLS.mupdf_display_errors(False)           # 구조 태그 PDF를 정리할 때 나오는 무해한 경고(invalid key in dict)가 로그를 덮지 않게
+    try:
+        data = out.tobytes(garbage=3, deflate=True)
+    finally:
+        pymupdf.TOOLS.mupdf_display_errors(True)
     out.close()
     return data

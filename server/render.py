@@ -40,6 +40,7 @@ figcaption{padding:.8em 1.1em;font-size:.78em;line-height:1.75}
 figcaption b{font-weight:650}
 details{margin-top:.5em}summary{cursor:pointer;color:var(--acc);font-weight:600}
 .leg{display:block;margin-top:.5em;color:var(--mut);font-size:.9em}
+.warn{display:block;margin-top:.5em;font-weight:700;font-size:.9em}
 table{border-collapse:collapse;width:100%;font-size:.84em;margin:.8em 0}
 th,td{border:1px solid var(--line);padding:.5em .7em;text-align:left;vertical-align:top}th{background:var(--soft)}
 pre{background:#1d2230;color:#e6ebf4;padding:.9em 1.1em;border-radius:12px;overflow:auto;font:.78em/1.6 'SF Mono',Consolas,'D2Coding',monospace;word-break:normal}
@@ -180,6 +181,14 @@ def _e(s) -> str:
     return _html.escape(str(s if s is not None else ""), quote=True)
 
 
+WARN_TEXT = "확인 필요 · 그림 속 글자 일부가 이 설명에 빠졌을 수 있어요"
+
+
+def needs_check(b) -> bool:
+    """그림 설명의 자기검증(enrich.describe_checked)에서 끝내 기준에 못 미친 그림인가"""
+    return bool(((b.get("ai_desc") or {}).get("verify") or {}).get("flag"))
+
+
 def _speak_code(raw: str) -> str:
     lines = [l for l in raw.split("\n")]
     out, prev = [f"코드 {len(lines)}줄 시작."], 0
@@ -294,9 +303,10 @@ def _figure_html(b, pg, job_dir: Path, o, fixed=None) -> str:
     texts = [t for t in dict.fromkeys((b.get("inner_text") or []) + (d.get("texts") or [])) if t]
     note = f' <b>색 설명</b> {_e(d["color_note"])}' if d.get("color_note") else ""
     det = f"<details><summary>그림 속 글자 {len(texts)}개</summary><ul>" + "".join(f"<li>{_e(t)}</li>" for t in texts) + "</ul></details>" if texts else ""
+    warn = f'<span class="warn">{WARN_TEXT}</span>' if needs_check(b) else ""
     speak = _e("그림. " + desc + (" 색 설명. " + d["color_note"] if d.get("color_note") else ""))
     return (f'<figure class="r" data-s="{speak}">{tag}<figcaption><b>그림 설명</b><span class="ai" title="AI가 만든 설명이라 틀릴 수 있어요">AI</span> '
-            f'{_e(desc)}{note}{legend}{det}</figcaption></figure>')
+            f'{_e(desc)}{note}{warn}{legend}{det}</figcaption></figure>')
 
 
 def to_html(doc: dict, job_dir: Path, o: dict, title: str = "") -> str:

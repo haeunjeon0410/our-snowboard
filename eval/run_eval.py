@@ -98,12 +98,28 @@ def spacing_eval(docs):
     p = tp / max(1, tp + fp); r = tp / max(1, tp + fn)
     f1 = 2 * p * r / max(1e-9, p + r)
     M["spacing_f1"] = f1; M["spacing_n"] = len(texts)
+    ktp = kfp = kfn = kexact = 0                                     # 같은 문장으로 Kiwi(AI 없이)도 잰다: AI를 쓸 수 없을 때의 대체 수단
+    for gold, s_in in zip(texts, stripped):
+        kout = enrich.kiwi_space(s_in) or s_in
+        kg, kp = set(), set(); k = 0
+        for ch in gold:
+            kg.add(k) if ch == " " else None
+            k += ch != " "
+        k = 0
+        for ch in kout:
+            kp.add(k) if ch == " " else None
+            k += ch != " "
+        ktp += len(kg & kp); kfp += len(kp - kg); kfn += len(kg - kp); kexact += kout.strip() == gold.strip()
+    kprec = ktp / max(1, ktp + kfp); krec = ktp / max(1, ktp + kfn)
+    kf1 = 2 * kprec * krec / max(1e-9, kprec + krec)
+    M["spacing_kiwi_f1"] = kf1
     return {"title": "2. 띄어쓰기 복원 정확도 (뇌질환 자료처럼 띄어쓰기가 사라진 글 대비)",
             "note": "정답이 있는 MIS 문서의 문장 %d개에서 띄어쓰기를 모두 지운 뒤 AI에게 복원하게 하고, 원문의 띄어쓰기 위치와 비교했습니다. AI가 글자를 하나라도 바꾸면 그 문장은 버리고 원문을 씁니다." % len(texts),
             "head": ["지표", "값"],
             "rows": [["평가한 문장 수", len(texts)], ["띄어쓰기 위치 정밀도", f"{100 * p:.1f}%"], ["띄어쓰기 위치 재현율", f"{100 * r:.1f}%"],
                      ["띄어쓰기 위치 F1", f"{100 * f1:.1f}%"], ["문장 전체가 정답과 똑같은 비율", f"{100 * exact / len(texts):.1f}%"],
-                     ["글자가 바뀌어 거부된 문장(원문 유지)", f"{len(texts) - accepted}개"]]}
+                     ["글자가 바뀌어 거부된 문장(원문 유지)", f"{len(texts) - accepted}개"],
+                     ["(비교) Kiwi로 AI 없이 복원한 F1", f"{100 * kf1:.1f}%  · 문장 전체 일치 {100 * kexact / len(texts):.1f}%"]]}
 
 
 def braille_eval(docs):

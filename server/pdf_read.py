@@ -44,6 +44,7 @@ p{{margin:4pt 0}} ul{{margin:4pt 0 4pt 14pt}} li{{margin:3pt 0}}
 .ai{{color:{mut};font-size:{base * 0.6}pt;font-weight:bold}}
 .cap{{background-color:{soft};padding:6pt 9pt;font-size:{base * 0.85}pt;margin:3pt 0 10pt}}
 .leg{{color:{mut};font-size:{base * 0.8}pt}}
+.warn{{font-weight:bold}}
 img{{margin:6pt 0}}
 table{{border-collapse:collapse;margin:8pt 0;font-size:{base * 0.85}pt}}
 th,td{{border:1px solid {line};padding:3pt 5pt;vertical-align:top}}
@@ -81,6 +82,8 @@ def _figure(b, pg, job_dir: Path, o, fixed, tmp: Path) -> str:
         extra = f" <b>색 설명</b> {e(note)}" if note else ""
         inn = f"<br><b>그림 속 글자</b> {e(', '.join(inner))}" if inner else ""
         parts.append(f'<p class="cap"><b>그림 설명</b> <span class="ai">[AI]</span> {e(desc)}{extra}{inn}</p>')
+        if render.needs_check(b):
+            parts.append(f'<p class="cap warn">{e(render.WARN_TEXT)}</p>')
     parts.append(legend)
     return "".join(parts)
 

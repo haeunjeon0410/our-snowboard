@@ -7,7 +7,7 @@ import time
 
 from openai import OpenAI
 
-from . import config
+from . import config, obs
 
 _client = None
 _lock = threading.Lock()
@@ -60,8 +60,8 @@ def image_part(img_bytes: bytes) -> dict:
     return {"type": "image_url", "image_url": {"url": f"data:{mime};base64," + b64}}
 
 
-def chat(prompt: str, *, images=(), model=None, system=None, max_tokens=1500, cache_extra="") -> str:
-    """텍스트(+이미지) 한 번 호출. 같은 입력이면 캐시를 돌려준다."""
+def chat(prompt: str, *, images=(), model=None, system=None, max_tokens=1500, cache_extra="", feature="", ver="") -> str:
+    """텍스트(+이미지) 한 번 호출. 같은 입력이면 캐시를 돌려준다. feature·ver: 어느 기능의 어느 프롬프트 버전인지 (사용량 기록용, 결과에는 영향 없음)."""
     model = model or (config.VISION_MODEL if images else config.TEXT_MODEL)
     img_hash = "".join(hashlib.sha256(i).hexdigest()[:16] for i in images)
     key = json.dumps([model, system, prompt, img_hash, cache_extra], ensure_ascii=False)
@@ -82,20 +82,24 @@ def chat(prompt: str, *, images=(), model=None, system=None, max_tokens=1500, ca
     messages = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": content}]
 
     last_err = None
+    t0 = time.time()
     for attempt, m in enumerate([model, model, config.FALLBACK_MODEL]):
         try:
             extra = {"reasoning_effort": "none"} if m.startswith("gpt-6") else {}
-            r = _get_client().chat.completions.create(
-                model=m, messages=messages, max_tokens=max_tokens, extra_body=extra)
-            text = (r.choices[0].message.content or "").strip()
-            u = getattr(r, "usage", None)           # 사용량 정보를 안 주는 응답도 있다. 그 때문에 이미 받은 답을 버리고 다시 부르면 크레딧이 두 번 나간다
-            tin, tout = (getattr(u, "prompt_tokens", 0) or 0), (getattr(u, "completion_tokens", 0) or 0)
+            with obs.generation(feature, m, prompt, ver, len(images)) as g:        # Langfuse 기록 (키가 없으면 아무것도 안 한다)
+                r = _get_client().chat.completions.create(
+                    model=m, messages=messages, max_tokens=max_tokens, extra_body=extra)
+                text = (r.choices[0].message.content or "").strip()
+                u = getattr(r, "usage", None)           # 사용량 정보를 안 주는 응답도 있다. 그 때문에 이미 받은 답을 버리고 다시 부르면 크레딧이 두 번 나간다
+                tin, tout = (getattr(u, "prompt_tokens", 0) or 0), (getattr(u, "completion_tokens", 0) or 0)
+                g.update(output=text, usage_details={"input": tin, "output": tout})
             with _lock:
                 usage_totals["calls"] += 1
                 usage_totals["input_tokens"] += tin
                 usage_totals["output_tokens"] += tout
                 with open(config.CACHE_DIR / "usage.jsonl", "a", encoding="utf-8") as f:
-                    f.write(json.dumps({"t": time.time(), "model": m, "in": tin, "out": tout}) + "\n")
+                    f.write(json.dumps({"t": time.time(), "model": m, "in": tin, "out": tout, "feature": feature, "ver": ver,
+                                        "sec": round(time.time() - t0, 2), "images": len(images)}) + "\n")
             if text:
                 tmp = cp.with_suffix(f".{threading.get_ident()}.tmp")       # 두 곳에서 동시에 써도 반쪽 파일이 남지 않게
                 tmp.write_text(json.dumps({"text": text}, ensure_ascii=False), encoding="utf-8")

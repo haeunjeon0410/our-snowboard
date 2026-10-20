@@ -1,5 +1,21 @@
 """점자 변환 결과를 문단 단위로 만든다 (파일 만들기는 render.py)."""
+import re
+
 from . import braille_ko as B
+
+# 한글 점자 규정에 없는 수학·화학 기호는 점자로 옮기지 못해 글자가 통째로 빠졌다. 정식 수학 점자(수식 표기)를 구현한 것은 아니고,
+# 빠지는 대신 소리 내어 읽는 말로 풀어서 점역한다 (예: 'A → B' → 'A 화살표 B'). 점역본을 읽는 사람이 뜻을 놓치지 않게 하는 임시 방편이다.
+SYMBOL_WORDS = {"=": "같음", "≠": "같지 않음", "≈": "거의 같음", "→": "화살표", "←": "왼쪽 화살표", "↔": "양방향 화살표", "↑": "위 화살표", "↓": "아래 화살표",
+                "⇒": "화살표", "+": "더하기", "×": "곱하기", "÷": "나누기", "±": "플러스마이너스", "≥": "크거나 같음", "≤": "작거나 같음",
+                "%": "퍼센트", "&": "앤드", "⁺": "플러스", "⁻": "마이너스", "°": "도", "μ": "마이크로", "α": "알파", "β": "베타", "γ": "감마", "Δ": "델타"}
+_SYM_RE = re.compile("[" + re.escape("".join(SYMBOL_WORDS)) + "]")
+
+
+def spell_symbols(text: str) -> str:
+    """점역 전에 기호를 말로 푼다. 기호가 없으면 글을 그대로 돌려준다."""
+    if not text or not _SYM_RE.search(text):
+        return text
+    return re.sub(r"[ \t]{2,}", " ", _SYM_RE.sub(lambda m: f" {SYMBOL_WORDS[m.group(0)]} ", text)).strip()
 
 
 def _items(page, use_easy: dict | None = None, figures: bool = True):
@@ -8,13 +24,13 @@ def _items(page, use_easy: dict | None = None, figures: bool = True):
     for b in page["blocks"]:
         t = b["type"]
         if t in ("paragraph", "heading"):
-            yield (t, easy.get(b["id"], b["text"]), bool(b.get("ai")) or b["id"] in easy, {"level": b.get("level", 2), "id": b["id"]})
+            yield (t, spell_symbols(easy.get(b["id"], b["text"])), bool(b.get("ai")) or b["id"] in easy, {"level": b.get("level", 2), "id": b["id"]})
         elif t == "list":
             for i, it in enumerate(b["items"]):
                 key = f"{b['id']}:{i}"
-                yield ("listitem", easy.get(key, it["text"]), bool(it.get("ai")) or key in easy, {"id": key})
+                yield ("listitem", spell_symbols(easy.get(key, it["text"])), bool(it.get("ai")) or key in easy, {"id": key})
         elif t == "code":
-            yield ("code", b["text"], False, {"id": b["id"]})
+            yield ("code", spell_symbols(b["text"]), False, {"id": b["id"]})
         elif t == "table":
             yield ("table", "", False, {"rows": b["rows"], "id": b["id"]})
         elif t == "figure":
@@ -25,7 +41,7 @@ def _items(page, use_easy: dict | None = None, figures: bool = True):
             texts = [t for t in dict.fromkeys(b.get("inner_text", []) + (d.get("texts") or [])) if t] if figures and text else []
             if texts:                                  # 웹 문서의 "그림 속 글자"와 같은 내용
                 text += " 그림 속 글자: " + ", ".join(texts)
-            yield ("figure", text, True, {"id": b["id"], "img": b["img"], "texts": texts})
+            yield ("figure", spell_symbols(text), True, {"id": b["id"], "img": b["img"], "texts": texts})
 
 
 def braille_pages(doc: dict, easy_by_page: dict | None = None, figures: bool = True, verify: bool = True):
@@ -47,9 +63,9 @@ def braille_pages(doc: dict, easy_by_page: dict | None = None, figures: bool = T
         easy = (easy_by_page or {}).get(str(pg["n"]), {})
         for kind, text, ai, extra in _items(pg, easy, figures):
             if kind == "table":
-                rows = [(B.SP * 2).join(B.encode(c, stats) for c in r) for r in extra["rows"]]
-                flat = " ".join(c for r in extra["rows"] for c in r)
-                sg = seg("table", "\n".join(" | ".join(r) for r in extra["rows"]), False, "\n".join(rows))
+                rows = [(B.SP * 2).join(B.encode(spell_symbols(c), stats) for c in r) for r in extra["rows"]]
+                flat = " ".join(spell_symbols(c) for r in extra["rows"] for c in r)
+                sg = seg("table", "\n".join(" | ".join(spell_symbols(c) for c in r) for r in extra["rows"]), False, "\n".join(rows))
                 if verify:
                     back = B.decode(B.encode(flat))
                     ok = B.normalize_for_compare(flat) == B.normalize_for_compare(back)

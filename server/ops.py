@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from . import color, config, enrich, jobs, llm, pdf_out, pdf_read, render
+from . import color, config, enrich, jobs, llm, pdf_out, pdf_read, render, tagger
 from .extract import _needs_spacing
 
 _POOL = ThreadPoolExecutor(max_workers=12)         # 쪽 단위 동시 처리 (AI 서버는 동시 32개까지 오류 없이 받았다)
@@ -171,6 +171,12 @@ def _work_page(job, pg, o, budget: dict | None = None) -> bool:
                 new = enrich.restore_spacing(b["inner_text"])
                 failed |= None in new
                 b["inner_text"] = [n if n is not None else t for n, t in zip(new, b["inner_text"])]
+    if slots and not ai:                                          # AI를 쓸 수 없으면 Kiwi로 대신한다 (정확도는 조금 낮지만 크레딧 없이 된다). 'restore' 표시는 그대로 두어 나중에 AI로 다시 할 수 있다
+        for obj in slots:
+            new = enrich.kiwi_space(obj["text"])
+            if new and new != obj["text"]:
+                obj.setdefault("raw_text", obj["text"])
+                obj["text"] = new
     if not ai:
         return failed
     # 2) 그림 설명 (체크했을 때, 또는 스캔본이라 글자를 읽어야 할 때)
@@ -186,7 +192,7 @@ def _work_page(job, pg, o, budget: dict | None = None) -> bool:
                 if take < len(todo):
                     budget["cut"] = True
             todo = todo[:take]
-        results = list(_FIG_POOL.map(lambda b: enrich.describe_figure((d / b["img"]).read_bytes(), b.get("fig_kind", "image"), ctx, b.get("fullpage", False)), todo))
+        results = list(_FIG_POOL.map(lambda b: enrich.describe_checked((d / b["img"]).read_bytes(), b.get("fig_kind", "image"), ctx, b.get("fullpage", False), b.get("inner_text")), todo))
         for b, r in zip(todo, results):
             if "error" in r:
                 failed = True
@@ -283,8 +289,9 @@ def _summary(job, o) -> list[str]:
         out.append(f"사라진 띄어쓰기를 {restored}개 문단에서 바로잡았어요")
     if ocr:
         out.append(f"스캔된 {ocr}쪽의 글자를 읽어 냈어요")
+    flagged = sum(1 for b in figs if (b["ai_desc"].get("verify") or {}).get("flag"))
     if o["figures"]:
-        out.append(f"그림 {len(figs)}개에 설명을 붙였어요" if figs else ("설명을 붙일 그림이 없었어요" if not nfig else "그림 설명은 AI를 쓸 수 없어 건너뛰었어요"))
+        out.append(f"그림 {len(figs)}개에 설명을 붙였어요" + (f" (그림 속 글자가 PDF와 덜 맞는 {flagged}개는 확인이 필요해요)" if flagged else "") if figs else ("설명을 붙일 그림이 없었어요" if not nfig else "그림 설명은 AI를 쓸 수 없어 건너뛰었어요"))
     if o["color"]:
         out.append(f"색으로 칠한 도식 {colored}개를 구분하기 쉽게 바꿨어요" if colored else "색으로 구분된 도식이 없어서 바꾼 곳은 없어요")
     if o["easy"]:
@@ -408,6 +415,10 @@ def _safe_name(s: str) -> str:
 def _run(job, o, task):
     try:
         doc = job["doc"]
+        tag_th = None
+        if o["pdf"] and o.get("tagged", True) and tagger.available():            # 구조 태그 달기(14초쯤)는 AI 작업과 동시에 시작한다
+            tag_th = threading.Thread(target=tagger.tag, args=(jobs.job_dir(job["meta"]["id"]) / "original.pdf", jobs.job_dir(job["meta"]["id"])), daemon=True)
+            tag_th.start()
         work = [pg for pg in doc["pages"] if _needs_work(pg, o)]
         task["total"] = len(work)
         if work:
@@ -461,6 +472,8 @@ def _run(job, o, task):
             task["note"] = (task["note"] + " / " if task["note"] else "") + "PDF를 만들 한글 글꼴이 없어 웹 문서로 만들었어요"
         brf_text = render.to_brf(doc, o) if o["braille"] else None
         tag = _file_tag(o)
+        if tag_th is not None:
+            tag_th.join()
         if o["pdf"]:
             pdf_path = out_dir / f"{base} ({tag}).pdf"
             brf_att = (f"{base} (점자).brf", brf_text) if brf_text else None       # PDF 한 파일에도 점자가 들어 있게

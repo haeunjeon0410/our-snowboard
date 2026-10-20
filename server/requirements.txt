@@ -6,3 +6,9 @@ numpy
 pillow
 fonttools
 pywin32; sys_platform == "win32"
+
+# 선택: AI 호출 기록 (.env에 LANGFUSE 키가 있을 때만 쓰임)
+# langfuse
+# 선택 (없어도 동작): 구조 태그 PDF는 Java 11+ 와 opendataloader-pdf, AI 없이 띄어쓰기는 kiwipiepy
+# opendataloader-pdf
+# kiwipiepy
