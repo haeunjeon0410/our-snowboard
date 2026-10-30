@@ -60,12 +60,15 @@ def image_part(img_bytes: bytes) -> dict:
     return {"type": "image_url", "image_url": {"url": f"data:{mime};base64," + b64}}
 
 
-def chat(prompt: str, *, images=(), model=None, system=None, max_tokens=1500, cache_extra="", feature="", ver="") -> str:
-    """텍스트(+이미지) 한 번 호출. 같은 입력이면 캐시를 돌려준다. feature·ver: 어느 기능의 어느 프롬프트 버전인지 (사용량 기록용, 결과에는 영향 없음)."""
+def _key_path(prompt, images, model, system, cache_extra):
     model = model or (config.VISION_MODEL if images else config.TEXT_MODEL)
     img_hash = "".join(hashlib.sha256(i).hexdigest()[:16] for i in images)
-    key = json.dumps([model, system, prompt, img_hash, cache_extra], ensure_ascii=False)
-    cp = _cache_path(key)
+    return model, _cache_path(json.dumps([model, system, prompt, img_hash, cache_extra], ensure_ascii=False))
+
+
+def chat(prompt: str, *, images=(), model=None, system=None, max_tokens=1500, cache_extra="", feature="", ver="") -> str:
+    """텍스트(+이미지) 한 번 호출. 같은 입력이면 캐시를 돌려준다. feature·ver: 어느 기능의 어느 프롬프트 버전인지 (사용량 기록용, 결과에는 영향 없음)."""
+    model, cp = _key_path(prompt, images, model, system, cache_extra)
     if cp.exists():
         try:
             text = json.loads(cp.read_text(encoding="utf-8"))["text"]
@@ -112,12 +115,28 @@ def chat(prompt: str, *, images=(), model=None, system=None, max_tokens=1500, ca
     raise RuntimeError(f"AI 호출 실패: {str(last_err)[:200]}")
 
 
-def chat_json(prompt: str, **kw):
-    """JSON으로 답하게 하고 파싱한다. 코드 펜스가 붙어 와도 처리."""
-    text = chat(prompt, **kw)
+def _parse_json(text: str):
     t = text.strip()
     if t.startswith("```"):
         t = t.split("\n", 1)[1] if "\n" in t else t
         t = t.rsplit("```", 1)[0]
     s, e = min([i for i in (t.find("["), t.find("{")) if i >= 0], default=0), max(t.rfind("]"), t.rfind("}"))
     return json.loads(t[s:e + 1])
+
+
+def chat_json(prompt: str, **kw):
+    """JSON으로 답하게 하고 파싱한다. 코드 펜스가 붙어 와도 처리.
+    답이 깨져 있으면(중간에 잘림 등) 저장된 그 답을 지우고 한 번 더 묻는다. 지우지 않으면 같은 깨진 답이 캐시에서 계속 나와 그 항목은 다시 변환해도 영영 실패한다."""
+    for attempt in (0, 1):
+        text = chat(prompt, **kw)
+        try:
+            return _parse_json(text)
+        except Exception:
+            if attempt:
+                raise
+            _, cp = _key_path(prompt, kw.get("images", ()), kw.get("model"), kw.get("system"), kw.get("cache_extra", ""))
+            try:
+                cp.unlink()
+            except OSError:
+                pass
+            kw = {**kw, "max_tokens": int(kw.get("max_tokens", 1500) * 1.5)}       # 길어서 잘린 거라면 이번에는 더 길게

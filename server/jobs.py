@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from . import config
-from .extract import extract
+from .extract import VER as EXTRACT_VER, extract
 
 _lock = threading.Lock()
 _jobs: dict[str, dict] = {}   # id -> {"meta", "doc", "lock"}
@@ -21,8 +21,16 @@ def job_dir(jid: str) -> Path:
 def save(job):
     d = job_dir(job["meta"]["id"])
     with job["lock"]:
+        for attempt in range(5):                                  # 다른 변환이 문서를 고치는 순간과 겹치면 직렬화가 한 번 실패할 수 있어서 다시 시도한다
+            try:
+                payload = json.dumps(job["doc"], ensure_ascii=False)
+                break
+            except RuntimeError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.05)
         tmp = d / "doc.json.tmp"
-        tmp.write_text(json.dumps(job["doc"], ensure_ascii=False), encoding="utf-8")
+        tmp.write_text(payload, encoding="utf-8")
         tmp.replace(d / "doc.json")
         (d / "meta.json").write_text(json.dumps(job["meta"], ensure_ascii=False), encoding="utf-8")
 
@@ -32,11 +40,14 @@ def create(pdf_bytes: bytes, filename: str, course: str = "", title: str = "") -
     jid = hashlib.sha1(pdf_bytes).hexdigest()[:10]
     with _lock:
         j = _jobs.get(jid)
+        if j and j["doc"].get("ver") != EXTRACT_VER:           # 예전 방식으로 뽑은 자료: 새로 뽑는다 (AI 응답은 그림이 같으면 저장해 둔 것을 쓰므로 크레딧은 거의 들지 않는다)
+            _jobs.pop(jid, None)
+            j = None
         if j:
             j["meta"]["created"] = time.time()          # 다시 올리면 보관 시간을 새로 센다
             changed = False
             for k, v in (("course", course), ("title", title)):
-                if v and j["meta"].get(k) != v:
+                if v and not j["meta"].get(k):                 # 이미 있는 과목명·제목은 다른 사람이 같은 파일을 올려도 덮어쓰지 않는다
                     j["meta"][k] = v
                     changed = True
             if changed:
@@ -55,7 +66,7 @@ def create(pdf_bytes: bytes, filename: str, course: str = "", title: str = "") -
         doc = extract(d / "original.pdf", d)
         doc["course"] = course
         meta = {"id": jid, "filename": filename, "course": course, "title": title, "created": time.time(), "n_pages": doc["n_pages"]}
-        job = {"meta": meta, "doc": doc, "lock": threading.Lock()}
+        job = {"meta": meta, "doc": doc, "lock": threading.Lock(), "run": threading.Lock()}
         with _lock:
             _jobs[jid] = job
         save(job)
@@ -131,4 +142,4 @@ def load_existing():
             doc = json.loads(dp.read_text(encoding="utf-8"))
         except Exception:
             continue
-        _jobs[meta["id"]] = {"meta": meta, "doc": doc, "lock": threading.Lock()}
+        _jobs[meta["id"]] = {"meta": meta, "doc": doc, "lock": threading.Lock(), "run": threading.Lock()}

@@ -1,5 +1,6 @@
 """점자 변환 결과를 문단 단위로 만든다 (파일 만들기는 render.py)."""
 import re
+import unicodedata
 
 from . import braille_ko as B
 
@@ -7,15 +8,56 @@ from . import braille_ko as B
 # 빠지는 대신 소리 내어 읽는 말로 풀어서 점역한다 (예: 'A → B' → 'A 화살표 B'). 점역본을 읽는 사람이 뜻을 놓치지 않게 하는 임시 방편이다.
 SYMBOL_WORDS = {"=": "같음", "≠": "같지 않음", "≈": "거의 같음", "→": "화살표", "←": "왼쪽 화살표", "↔": "양방향 화살표", "↑": "위 화살표", "↓": "아래 화살표",
                 "⇒": "화살표", "+": "더하기", "×": "곱하기", "÷": "나누기", "±": "플러스마이너스", "≥": "크거나 같음", "≤": "작거나 같음",
-                "%": "퍼센트", "&": "앤드", "⁺": "플러스", "⁻": "마이너스", "°": "도", "μ": "마이크로", "α": "알파", "β": "베타", "γ": "감마", "Δ": "델타"}
-_SYM_RE = re.compile("[" + re.escape("".join(SYMBOL_WORDS)) + "]")
+                "%": "퍼센트", "&": "앤드", "⁺": "플러스", "⁻": "마이너스", "°": "도", "μ": "마이크로", "α": "알파", "β": "베타", "γ": "감마", "Δ": "델타",
+                "−": "빼기", "≡": "합동", "≢": "합동 아님", "≅": "합동", "∤": "나누어떨어지지 않음", "⊕": "엑스오어", "⋯": "점점점", "*": "별표", "#": "샵", "_": "밑줄",
+                "^": "캐럿", "|": "세로선", "{": "여는 중괄호", "}": "닫는 중괄호", "<": "보다 작음", ">": "보다 큼", "²": "제곱", "³": "세제곱", "✕": "곱하기",
+                "⇄": "양방향 화살표", "⇢": "화살표", "↺": "회전 화살표", "↙": "화살표", "↘": "화살표", "①": "동그라미 1", "②": "동그라미 2", "③": "동그라미 3", "④": "동그라미 4",
+                "⑤": "동그라미 5", "「": '"', "」": '"', "ε": "엡실론", "ζ": "제타", "η": "에타", "θ": "세타", "ι": "요타", "κ": "카파", "λ": "람다", "ν": "뉴", "ξ": "크시",
+                "π": "파이", "ρ": "로", "σ": "시그마", "τ": "타우", "υ": "입실론", "φ": "파이", "ϕ": "파이", "𝜙": "파이", "χ": "카이", "ψ": "프사이", "ω": "오메가",
+                "Σ": "시그마", "Ω": "오메가", "Π": "파이", "Φ": "파이", "Θ": "세타", "Λ": "람다"}
+_DROP = re.compile("[─-╿■-◿•·]")      # 선·도형·글머리표처럼 뜻이 없는 장식은 조용히 버려도 된다 (그 밖의 글자는 버리지 않는다)
+_HANJA_GLOSS = re.compile(r"(?<=[가-힣])\s*[(（]\s*[㐀-鿿]+\s*[)）]")
+_probe: dict[str, bool] = {}
+
+
+def _braille_handles(c: str) -> bool:
+    """이 글자를 점자 변환기가 그대로 옮길 수 있는가 (옮기지 못하면 글자가 통째로 빠진다)."""
+    if c not in _probe:
+        st = {}
+        B.encode(c, st)
+        _probe[c] = not st.get("unmapped")
+    return _probe[c]
+
+
+def _plain(c: str) -> str:
+    """수학 서체·위아래 첨자·악센트 글자를 바탕 글자로 (𝟷 → 1, ₃ → 3, è → e). 바탕 글자가 아니면 빈 글."""
+    base = unicodedata.normalize("NFKD", c)
+    base = "".join(x for x in base if not unicodedata.combining(x))
+    return base if base and all(x.isascii() and x.isalnum() for x in base) else ""
 
 
 def spell_symbols(text: str) -> str:
-    """점역 전에 기호를 말로 푼다. 기호가 없으면 글을 그대로 돌려준다."""
-    if not text or not _SYM_RE.search(text):
+    """점역 전에 기호를 말로 푼다. 풀 수 없는 글자는 조용히 빼지 않고 '기호'(한자는 '한자')로 남겨, 읽는 사람이 빠진 것이 있음을 알게 한다."""
+    if not text:
         return text
-    return re.sub(r"[ \t]{2,}", " ", _SYM_RE.sub(lambda m: f" {SYMBOL_WORDS[m.group(0)]} ", text)).strip()
+    text = _HANJA_GLOSS.sub("", text)                     # 한글 바로 뒤의 '(한자)' 병기는 앞 한글과 같은 말이라 점자본에서는 뺀다 (예: 매매(賣買) → 매매)
+    out, changed = [], False
+    for c in text:
+        if c in SYMBOL_WORDS:
+            out.append(f" {SYMBOL_WORDS[c]} ")
+        elif c.isascii() or c.isspace() or _braille_handles(c):
+            out.append(c)
+            continue
+        elif _DROP.match(c):
+            out.append(" ")
+        elif _plain(c):
+            out.append(_plain(c))
+        elif unicodedata.category(c) == "Lo" and "CJK" in unicodedata.name(c, ""):
+            out.append(" 한자 ")
+        else:
+            out.append(" 기호 ")
+        changed = True
+    return re.sub(r"[ \t]{2,}", " ", re.sub(r"(?: ?한자 ?)+", " 한자 ", "".join(out))).strip() if changed else text
 
 
 def _items(page, use_easy: dict | None = None, figures: bool = True):
@@ -35,13 +77,15 @@ def _items(page, use_easy: dict | None = None, figures: bool = True):
             yield ("table", "", False, {"rows": b["rows"], "id": b["id"]})
         elif t == "figure":
             d = (b.get("ai_desc") or {}) if figures else {}
-            text = d.get("desc") or " ".join(x for x in (d.get("summary"), d.get("detail")) if x)
-            if d.get("color_note"):
+            desc = d.get("desc") or " ".join(x for x in (d.get("summary"), d.get("detail")) if x)
+            text = desc
+            if desc and d.get("color_note"):
                 text += " 색 설명: " + d["color_note"]
-            texts = [t for t in dict.fromkeys(b.get("inner_text", []) + (d.get("texts") or [])) if t] if figures and text else []
+            # 그림 속 글자는 원본 PDF에 글자로 들어 있던 것이라 AI 설명이 없어도 넣는다 (넣지 않으면 도식 안의 내용이 점자에서 통째로 사라진다)
+            texts = [t for t in dict.fromkeys(b.get("inner_text", []) + ((d.get("texts") or []) if desc else [])) if t]
             if texts:                                  # 웹 문서의 "그림 속 글자"와 같은 내용
-                text += " 그림 속 글자: " + ", ".join(texts)
-            yield ("figure", spell_symbols(text), True, {"id": b["id"], "img": b["img"], "texts": texts})
+                text += (" " if text else "") + "그림 속 글자: " + ", ".join(texts)
+            yield ("figure", spell_symbols(text), bool(desc), {"id": b["id"], "img": b["img"], "texts": texts, "desc": bool(desc)})
 
 
 def braille_pages(doc: dict, easy_by_page: dict | None = None, figures: bool = True, verify: bool = True):
@@ -73,8 +117,8 @@ def braille_pages(doc: dict, easy_by_page: dict | None = None, figures: bool = T
                 segs.append(sg)
                 continue
             if kind == "figure":
-                label = "그림 설명. " + text if text else "그림"
-                segs.append(seg("figure", label, True, B.encode(label, stats)))
+                label = (("그림 설명. " if extra.get("desc") else "그림. ") + text) if text else "그림"
+                segs.append(seg("figure", label, bool(extra.get("desc")), B.encode(label, stats)))
                 continue
             prefix = "· " if kind == "listitem" else ""
             segs.append(seg(kind, prefix + text, ai, B.encode(prefix + text, stats)))

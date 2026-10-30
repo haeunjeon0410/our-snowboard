@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pymupdf
 
+VER = 4          # 그림·도식을 찾는 방식이 바뀌면 올린다 (이미 올린 자료는 다음에 올릴 때 다시 추출한다)
+
 BULLET_RE = re.compile(r"^\s*([•▪■●○◦·\-–—*▶▷◆◇※]|\d{1,2}[.)]|[가-하][.)]|\(\d{1,2}\))\s*")
 SENT_END_RE = re.compile(r"[.!?。…]$|[다요임음함됨]\.?$")
 MONO_RE = re.compile(r"mono|consol|courier|menlo|code|d2coding", re.I)
@@ -97,7 +99,25 @@ def _is_colored(color_int: int) -> bool:
     return mx > 0.35 and (mx - mn) / max(mx, 1e-9) > 0.45
 
 
-def _diagram_regions(page, drawings, table_boxes, line_boxes):
+def _merge_near(rects, gap):
+    """가까이 있는 사각형들을 하나로 합친다 (아이콘과 선으로 이루어진 도식이 조각나지 않게)."""
+    rects = [list(r) for r in rects]
+    changed = True
+    while changed:
+        changed, out = False, []
+        for r in rects:
+            for o in out:
+                if r[0] <= o[2] + gap and r[2] >= o[0] - gap and r[1] <= o[3] + gap and r[3] >= o[1] - gap:
+                    o[0], o[1], o[2], o[3] = min(o[0], r[0]), min(o[1], r[1]), max(o[2], r[2]), max(o[3], r[3])
+                    changed = True
+                    break
+            else:
+                out.append(r)
+        rects = out
+    return [tuple(r) for r in rects]
+
+
+def _base_diagram_regions(page, drawings, table_boxes, line_boxes):
     """도식(박스와 화살표로 된 그림) 후보 영역. 배경 같은 큰 도형은 빼고 묶는다."""
     W, H = page.rect.width, page.rect.height
     kept = [d for d in drawings if d.get("rect") is not None and 0 < _area(d["rect"]) < 0.55 * W * H]
@@ -119,6 +139,42 @@ def _diagram_regions(page, drawings, table_boxes, line_boxes):
                 continue
             regions.append(c)
     return regions[:6]
+
+
+def _diagram_regions(page, drawings, table_boxes, line_boxes, lines=None):
+    """도식(박스와 화살표로 된 그림)·차트 후보 영역. 처음 방식으로 찾은 영역에, 그 방식이 놓친 도식·차트(글자가 도형으로 그려져 있거나 선으로만 된 것)를 더한다."""
+    base = _base_diagram_regions(page, drawings, table_boxes, line_boxes)
+    W, H = page.rect.width, page.rect.height
+
+    def usable(d):                  # 선(두께 0)도 차트의 일부다. 쪽 크기의 배경 도형과 쪽을 가로지르는 긴 선(제목 밑줄 등)만 뺀다
+        r = d.get("rect")
+        if r is None:
+            return False
+        w, h = max(0, r[2] - r[0]), max(0, r[3] - r[1])
+        if w * h == 0:
+            return 4 < max(w, h) and max(w / W, h / H) < 0.6
+        return w * h < 0.55 * W * H
+    kept = [d for d in drawings if usable(d)]
+    if len(kept) < 15:
+        return base
+    try:
+        clusters = [tuple(c) for c in page.cluster_drawings(drawings=kept, x_tolerance=6, y_tolerance=6)]
+    except Exception:
+        return base
+    out = list(base)
+    for c in _merge_near(clusters, 18):
+        if _area(c) < 0.08 * W * H:
+            continue
+        if sum(1 for d in kept if _inside(tuple(d["rect"]), c, 3)) < 15:
+            continue
+        if any(_inside(t, c, 3) or _inside(c, t, 3) for t in table_boxes):
+            continue
+        if any(_area(tuple(pymupdf.Rect(c) & pymupdf.Rect(r))) > 0.2 * min(_area(c), _area(r)) for r in out):
+            continue                                                # 이미 찾은 영역과 겹치면 더하지 않는다 (기존 결과는 그대로 둔다)
+        if lines and sum(1 for l in lines if _center_in(l["bbox"], c) and len(l["text"]) >= 35) >= 2:
+            continue                                                # 긴 문장이 둘 이상 들어 있으면 본문을 둘러싼 것이지 도식이 아니다
+        out.append(c)
+    return out[:8]
 
 
 def _merge_wrapped(items):
@@ -266,7 +322,7 @@ def extract(pdf_path: Path, out_dir: Path, progress=None) -> dict:
             if r.width < 40 or r.height < 40 or _area(r) < 0.012 * W * H:
                 continue
             fig_boxes.append((tuple(r), "image", _area(r) > 0.6 * W * H))
-        diag = _diagram_regions(page, drawings, table_boxes, [l["bbox"] for l in lines])
+        diag = _diagram_regions(page, drawings, table_boxes, [l["bbox"] for l in lines], lines)
         for c in diag:
             if not any(_inside(c, fb[0], 6) for fb in fig_boxes):
                 fig_boxes.append((c, "diagram", False))
@@ -399,4 +455,4 @@ def extract(pdf_path: Path, out_dir: Path, progress=None) -> dict:
                 break
         if title:
             break
-    return {"title": title or Path(pdf_path).stem, "body_size": body, "n_pages": n_pages, "pages": pages}
+    return {"title": title or Path(pdf_path).stem, "body_size": body, "n_pages": n_pages, "pages": pages, "ver": VER}

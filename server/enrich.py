@@ -1,16 +1,18 @@
 """AI 작업: 띄어쓰기 복원, 그림 설명, 쉬운 한국어, 영어 용어. 모든 호출은 캐시되고, 체크한 항목에서만 부른다."""
+import difflib
 import io
 import json
+import os
 import re
 
 from PIL import Image
 
-from . import llm, obs
+from . import config, llm, obs
 
 _WS = re.compile(r"\s+")
 
 # 프롬프트를 고칠 때마다 올린다 (사용량 기록과 eval/experiments.py의 비교에 쓰인다)
-SPACING_VER, FIG_VER, WORDS_VER = "v1", "v2-verify", "v2-merged"
+SPACING_VER, FIG_VER, WORDS_VER, SEM_VER = "v1", "v2-verify", "v3-course", "v1"
 
 
 def _strip_ws(s: str) -> str:
@@ -101,7 +103,7 @@ EASYWORD_PROMPT = """다음은 대학 강의 자료의 문장들이다. 한국�
 - 단어(ko)은 문장에 나온 그대로의 표기여야 한다. 전문 용어(예: 신경관)는 제외한다.
 - 많아야 12개. JSON 배열 하나만 출력: [{{"ko": "용이하다", "easy": "쉽다"}}]
 
-입력:
+{domain}입력:
 {payload}"""
 
 TERMS_PROMPT = """다음 한국어 강의 문장들에서 영어를 함께 적어 주면 좋은 전문 용어를 골라라.
@@ -109,14 +111,23 @@ TERMS_PROMPT = """다음 한국어 강의 문장들에서 영어를 함께 적�
 - 문장에 나온 그대로의 한국어 표기(ko)와 영어(en)를 짝지어 최대 15개.
 - JSON 배열 하나만 출력: [{{"ko": "신경관", "en": "neural tube"}}]
 
-입력:
+{domain}입력:
 {payload}"""
 
 
-def easy_words(texts: list[str]) -> list[dict] | None:
+def _domain(course: str) -> str:
+    """과목 이름이 있으면 그 과목의 전문적인 뜻을 기준으로 풀게 한다 (법학의 '선의'처럼 일상어와 뜻이 다른 용어를 일상적인 뜻으로 풀지 않게)."""
+    c = " ".join((course or "").split())[:60]
+    if not c:
+        return ""
+    return (f"과목: {c}\n이 과목에서 쓰는 전문적인 뜻을 기준으로 한다. 일상어와 뜻이 다른 용어(예: 법학의 선의=사정을 모름, 악의=사정을 앎)는 일상적인 뜻으로 풀지 않는다. "
+            "뜻을 확신할 수 없으면 고르지 않는다.\n\n")
+
+
+def easy_words(texts: list[str], course: str = "") -> list[dict] | None:
     """어려운 단어와 쉬운 말 목록. AI가 실패하면 None (빈 목록 []은 '붙일 단어가 없음'이라는 정상 결과)."""
     try:
-        res = llm.chat_json(EASYWORD_PROMPT.format(payload=json.dumps(texts, ensure_ascii=False)), max_tokens=1500, feature="easy", ver=WORDS_VER)
+        res = llm.chat_json(EASYWORD_PROMPT.format(domain=_domain(course), payload=json.dumps(texts, ensure_ascii=False)), max_tokens=1500, feature="easy", ver=WORDS_VER)
     except Exception:
         return None
     joined = " ".join(texts)
@@ -131,10 +142,10 @@ def easy_words(texts: list[str]) -> list[dict] | None:
     return out[:12]
 
 
-def english_terms(texts: list[str]) -> list[dict] | None:
+def english_terms(texts: list[str], course: str = "") -> list[dict] | None:
     """영어 병기 목록. AI가 실패하면 None (빈 목록 []은 '찾은 게 없음'이라는 정상 결과)."""
     try:
-        res = llm.chat_json(TERMS_PROMPT.format(payload=json.dumps(texts, ensure_ascii=False)), max_tokens=1500, feature="terms", ver=WORDS_VER)
+        res = llm.chat_json(TERMS_PROMPT.format(domain=_domain(course), payload=json.dumps(texts, ensure_ascii=False)), max_tokens=1500, feature="terms", ver=WORDS_VER)
     except Exception:
         return None
     joined = " ".join(texts)
@@ -151,7 +162,7 @@ BOTH_PROMPT = """다음은 대학 강의 자료의 문장들이다. 아래 두 �
 - ko는 문장에 나온 그대로의 표기여야 한다. 뜻이 바뀌면 안 된다.
 - JSON 객체 하나만 출력: {{"easy": [{{"ko": "용이하다", "easy": "쉽다"}}], "terms": [{{"ko": "신경관", "en": "neural tube"}}]}}
 
-입력:
+{domain}입력:
 {payload}"""
 
 
@@ -175,10 +186,10 @@ def _clean_terms(res, joined: str) -> list[dict]:
     return out[:15]
 
 
-def words_and_terms(texts: list[str]) -> tuple[list[dict] | None, list[dict] | None]:
+def words_and_terms(texts: list[str], course: str = "") -> tuple[list[dict] | None, list[dict] | None]:
     """(단어 뜻, 영어 용어). AI가 실패하면 둘 다 None (나중에 다시 시도할 수 있게)."""
     try:
-        res = llm.chat_json(BOTH_PROMPT.format(payload=json.dumps(texts, ensure_ascii=False)), max_tokens=2200, feature="easy+terms", ver=WORDS_VER)
+        res = llm.chat_json(BOTH_PROMPT.format(domain=_domain(course), payload=json.dumps(texts, ensure_ascii=False)), max_tokens=2200, feature="easy+terms", ver=WORDS_VER)
     except Exception:
         return None, None
     if not isinstance(res, dict):
@@ -196,13 +207,31 @@ def _truth_labels(inner_text) -> list[str]:
     return list(dict.fromkeys(_strip_ws(t) for t in (inner_text or []) if len(_strip_ws(t)) >= 2))
 
 
+_NOT_TEXT = re.compile(r"[^0-9A-Za-z가-힣]")
+
+
+def _norm(t: str) -> str:
+    """글자·숫자·한글만 남긴다. 'y_A ← g^{x_A}'와 'yA←gxA'처럼 수식 표기만 다른 것을 같게 본다."""
+    return _NOT_TEXT.sub("", t or "")
+
+
+def _found(label: str, blob: str) -> bool:
+    """라벨이 설명에 담겼는가. 그대로 들어 있거나, 긴 라벨은 PDF가 글자 조각(첨자 등)을 빠뜨려도 85% 이상 이어서 일치하면 담긴 것으로 본다."""
+    if label in blob:
+        return True
+    if len(label) < 6:
+        return False
+    sm = difflib.SequenceMatcher(None, label, blob, autojunk=False)
+    return sum(m.size for m in sm.get_matching_blocks()) / len(label) >= 0.85 and sm.find_longest_match(0, len(label), 0, len(blob)).size >= 4
+
+
 def label_recall(res: dict, inner_text) -> tuple[float | None, int]:
     """AI 설명이 PDF 안의 실제 그림 속 글자를 얼마나 담았는지. 정답지가 모자라면 (None, 개수)."""
-    truth = _truth_labels(inner_text)
+    truth = list(dict.fromkeys(n for n in (_norm(t) for t in _truth_labels(inner_text)) if len(n) >= 2))
     if len(truth) < VERIFY_MIN_LABELS:
         return None, len(truth)
-    blob = _strip_ws(" ".join((res.get("texts") or []) + [res.get("desc", "")]))
-    return sum(t in blob for t in truth) / len(truth), len(truth)
+    blob = _norm(" ".join((res.get("texts") or []) + [res.get("desc", "")]))
+    return sum(_found(t, blob) for t in truth) / len(truth), len(truth)
 
 
 def describe_checked(png_bytes: bytes, fig_kind: str, context: str, fullpage: bool, inner_text=None) -> dict:
@@ -213,8 +242,8 @@ def describe_checked(png_bytes: bytes, fig_kind: str, context: str, fullpage: bo
         if "error" in res:
             return res
         rec, n = label_recall(res, inner_text)
-        if rec is None:
-            return res
+        if rec is None:                                                     # 글자 정답지가 없는 그림: 다른 모델이 설명을 그림과 대조한다
+            return res if fullpage else semantic_check(png_bytes, res)
         first, retried = rec, False
         if rec < VERIFY_PASS:
             retried = True
@@ -226,6 +255,55 @@ def describe_checked(png_bytes: bytes, fig_kind: str, context: str, fullpage: bo
         res["verify"] = {"n": n, "recall": round(rec, 2), "first": round(first, 2), "retried": retried, "flag": rec < VERIFY_PASS}
         obs.score("label_recall_first", first, f"라벨 {n}개")
         obs.score("label_recall_final", rec, "재시도함" if retried else "재시도 없음")
+        return res
+
+
+# ───────────── 의미 점검: PDF 안에 글자 정답지가 없는 그림(순수 이미지)은 다른 모델이 설명을 그림과 대조한다 ─────────────
+SEM_VERIFY_PROMPT = """아래 설명은 첨부한 그림을 시각장애 학생에게 읽어 주려고 쓴 것이다. 설명의 각 문장을 그림과 대조해, 그림과 맞지 않거나 그림에서 확인되지 않는 사실(순서·방향·수치·가장 큰/작은 것·글자 오독·물체 오인)이 있으면 찾아라.
+- 그림에 보이지 않는 일반 상식이나 배경 설명은 문제로 치지 않는다.
+- JSON 객체 하나만 출력: {{"ok": true 또는 false, "problems": ["틀린 문장과 이유"]}}
+
+설명:
+{desc}
+그림 속 글자: {labels}"""
+
+SEM_REVISE_PROMPT = """시각장애 대학생에게 읽어 줄 그림 설명을 점검한다. 첨부한 그림과 기존 설명, 다른 검토자의 지적이 있다.
+지적을 그림과 직접 대조해 보고, 지적이 그림과 맞는 경우에만 설명을 고쳐라. 지적이 틀렸거나 사소하면 설명을 그대로 둔다.
+- 그림에서 확인되지 않는 내용은 쓰지 않는다. 글자는 보이는 대로 옮긴다.
+- JSON 객체 하나만 출력: {{"changed": true 또는 false, "desc": "최종 설명(고치지 않았으면 기존 설명 그대로)", "why": "고친 이유 또는 그대로 둔 이유 한 줄"}}
+
+기존 설명:
+{desc}
+
+검토자의 지적:
+{crit}"""
+
+
+def semantic_check(png_bytes: bytes, res: dict) -> dict:
+    """다른 계열 모델(FALLBACK_MODEL)이 설명을 그림과 대조해 틀린 곳을 지적하고, 설명을 만든 모델이 그 지적이 맞는지 그림을 다시 보고 맞을 때만 고친다.
+    실패하면 기존 설명을 그대로 돌려준다 (이 단계가 없어도 변환은 된다). OSB_SEMANTIC_CHECK=0 이면 건너뛴다.
+    결과의 sem: {flag: 지적이 있었는지, changed: 설명을 실제로 고쳤는지}"""
+    if os.environ.get("OSB_SEMANTIC_CHECK") == "0" or not res.get("desc"):
+        return res
+    try:
+        img = _shrink(png_bytes, False)
+        labels = " | ".join((res.get("texts") or [])[:40])
+        v = llm.chat_json(SEM_VERIFY_PROMPT.format(desc=res["desc"], labels=labels), images=[img], max_tokens=500,
+                          model=config.FALLBACK_MODEL, feature="sem-verify", ver=SEM_VER)
+        if isinstance(v, list):
+            v = v[0] if v else {}
+        problems = [str(x) for x in (v.get("problems") or [])][:4]
+        if v.get("ok", True) or not problems:
+            return {**res, "sem": {"flag": False, "changed": False}}
+        crit = "\n".join("- " + x for x in problems)
+        r = llm.chat_json(SEM_REVISE_PROMPT.format(desc=res["desc"], crit=crit), images=[img], max_tokens=900,
+                          feature="sem-revise", ver=SEM_VER)
+        if isinstance(r, list):
+            r = r[0] if r else {}
+        new = str(r.get("desc", "")).strip()
+        changed = bool(r.get("changed")) and bool(new) and new != res["desc"]
+        return {**res, "desc": new if changed else res["desc"], "sem": {"flag": True, "changed": changed}}
+    except Exception:
         return res
 
 

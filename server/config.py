@@ -1,5 +1,8 @@
 """환경 설정과 경로. 키는 .env에서만 읽는다."""
+import hashlib
+import hmac
 import os
+import secrets
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -49,3 +52,27 @@ DAILY_AI_LIMIT = _num("DAILY_AI_LIMIT", int)         # 하루 AI 호출 상한 (
 DAILY_TTS_LIMIT = _num("DAILY_TTS_LIMIT", int, 5000)       # 하루 AI 목소리 문장 수 상한 (기본 5000, 0이면 제한 없음). 같은 문장은 저장해 둔 소리를 쓰므로 세지 않는다
 DATA_TTL_HOURS = _num("DATA_TTL_HOURS", float)       # 올린 자료를 이 시간이 지나면 지운다 (0이면 안 지움)
 PUBLIC = bool(PUBLIC_URL)
+if PUBLIC:                                           # 공개 서버는 안전한 기본값을 둔다 (비워 두면 크레딧이 끝없이 나가고 남의 강의 파일이 계속 남는다)
+    DAILY_AI_LIMIT = DAILY_AI_LIMIT or 2000
+    DATA_TTL_HOURS = DATA_TTL_HOURS or 24.0
+ALLOWED_EXTENSION_IDS = {x.strip() for x in os.environ.get("ALLOWED_EXTENSION_IDS", "").split(",") if x.strip()}   # 있으면 이 ID의 확장 프로그램만 서버를 부를 수 있다
+
+
+def _tts_secret() -> str:
+    """읽어 주기(AI 목소리) 요청에 붙는 비밀 값. 내려받은 웹 문서에만 들어가므로, 다른 웹사이트가 내 서버로 목소리 요청을 보내 크레딧을 쓰지 못한다. 서버를 다시 켜도 같은 값을 쓴다."""
+    p = CACHE_DIR / "tts_secret"
+    try:
+        s = p.read_text(encoding="utf-8").strip()
+        if s:
+            return s
+    except OSError:
+        pass
+    s = secrets.token_hex(16)
+    try:
+        p.write_text(s, encoding="utf-8")
+    except OSError:
+        pass
+    return s
+
+
+TTS_TOKEN = hmac.new(_tts_secret().encode("utf-8"), b"osb-tts", hashlib.sha256).hexdigest()[:32]

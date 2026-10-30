@@ -164,7 +164,7 @@ button:hover{background:#34496f}button.x{background:none;color:#6b7689;padding:0
     const skip = el('button', { class: 'btn', type: 'button' }, '닫기');
     const more = el('button', { class: 'btn more', type: 'button' }, '세부 설정');
     // 색각 유형: 색 구분을 고르면 아래 줄 가운데에 나타난다. 자리는 항상 잡아 두어서 말풍선 모양이 바뀌지 않는다.
-    const csel = el('select', { class: 'csel off', 'aria-label': '색각 유형' }, el('option', { value: 'deutan' }, '적록'), el('option', { value: 'tritan' }, '청황'));
+    const csel = el('select', { class: 'csel off', 'aria-label': '색각 유형' }, el('option', { value: 'deutan' }, '녹색약'), el('option', { value: 'protan' }, '적색약'), el('option', { value: 'tritan' }, '청황색약'));
     csel.value = (saved.opts && saved.opts.colorType) || 'deutan';
     const showType = () => csel.classList.toggle('off', !picked.has('color'));
     showType();
@@ -252,7 +252,7 @@ button:hover{background:#34496f}button.x{background:none;color:#6b7689;padding:0
       if (!alive()) { staleNotice(); return; }
       const o = { ...D, ...(saved.opts || {}), pdf: true, readpdf: false, html: false, large: false, read: false, contrast: false, figures: false, color: false, easy: false, terms: false, braille: false, profile: true };
       for (const p of PROFILE) if (picked.has(p.id)) Object.assign(o, p.set);
-      if (o.large || o.read) Object.assign(o, { pdf: false, html: true });          // 큰 글씨·소리 읽기는 웹 문서에서만 (나머지는 원본 PDF에서도 된다)
+      if (o.read) Object.assign(o, { pdf: false, html: true });          // 큰 글씨·소리 읽기는 웹 문서에서만 (나머지는 원본 PDF에서도 된다)
       o.colorType = csel.value;
       saved.opts = o;
       try { await store.set({ opts: o, onboarded: true, profileIds: [...picked] }); } catch (e) { /* 무시 */ }

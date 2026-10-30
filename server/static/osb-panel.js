@@ -149,11 +149,11 @@
   const OPTIONS = [
     { key: 'braille', label: '점자 파일도 받기', sub: '점자 프린터용(.brf) 파일' },
     { key: 'figures', label: '그림·도식을 글로 설명', sub: '그림이 무엇인지 글로 설명', ai: true, needs: 'figures', none: '이 자료에는 그림이 없어요' },
-    { key: 'color', label: '색 구분 돕기', sub: n => `색 도식 ${n}개에 보정·무늬`, needs: 'colorFigures', hideIfNone: true, select: true },
+    { key: 'color', label: '색 구분 돕기', sub: n => `색으로 구분된 곳 ${n}곳에 보정·무늬·밑줄`, needs: 'colorItems', hideIfNone: true, select: true },
     { key: 'easy', label: '어려운 단어 뜻', sub: '쉬운 말 붙이기 · 용이하다(쉽다)', ai: true },
     { key: 'terms', label: '영어 용어 함께', sub: '영어 붙이기 · 알고리즘(algorithm)', ai: true },
     { key: 'contrast', label: '고대비', sub: '검정 바탕에 밝은 글씨' },
-    { key: 'large', web: true, label: '큰 글씨', sub: '글씨와 줄 간격 키우기' },
+    { key: 'large', label: '큰 글씨', sub: '글씨와 줄 간격 키우기' },
     { key: 'read', web: true, label: '소리로 읽어 주기', sub: '문서에 읽어 주기 버튼 넣기' }
   ];
   const KEYS = ['pdf', 'readpdf', 'html', 'braille', 'figures', 'color', 'easy', 'terms', 'contrast', 'large', 'read'];
@@ -162,7 +162,7 @@
   const PRESETS = [
     { id: 'read', label: '그림 읽기·점자', sub: '그림을 글로 설명하고 점자 파일도 받아요', set: { figures: true, braille: true }, ai: true },
     { id: 'low', label: '저시력', sub: '큰 글씨와 검정 바탕으로 바꾸고, 소리로 읽어 줘요', set: { large: true, contrast: true, read: true }, reflow: true },
-    { id: 'color', label: '색각 이상', sub: '색이 칠해진 도식에 보정과 무늬를 넣어요', set: { color: true }, needs: 'colorFigures', none: '이 자료에는 색이 칠해진 도식이 없어요' },
+    { id: 'color', label: '색각 이상', sub: '색 보정·무늬, 강조 글씨 밑줄', set: { color: true }, needs: 'colorItems', none: '이 자료에는 색으로 구분된 곳이 없어요' },
     { id: 'easy', label: '교환학생', sub: '어려운 단어와 전문 용어에 쉬운 말·영어를 붙여요', set: { easy: true, terms: true }, ai: true },
     { id: 'custom', label: '직접 설정', custom: true }
   ];
@@ -296,7 +296,7 @@
       let sel = null;
       if (def.select) {
         sel = h('select', { 'aria-label': '색각 유형' },
-          h('option', { value: 'deutan' }, '적록'), h('option', { value: 'tritan' }, '청황'));
+          h('option', { value: 'deutan' }, '녹색약'), h('option', { value: 'protan' }, '적색약'), h('option', { value: 'tritan' }, '청황색약'));
         sel.value = opts.colorType;
         sel.addEventListener('change', () => { opts.colorType = sel.value; syncAll(); });
       }
@@ -353,7 +353,7 @@
         if (psel) { psel.value = opts.colorType; pw.hidden = selectedId() !== 'color'; }
       });
       if (pr.id !== 'color' || off) return el;
-      psel = h('select', { 'aria-label': '색각 유형' }, h('option', { value: 'deutan' }, '적록'), h('option', { value: 'tritan' }, '청황'));   // 색각 이상을 고른 때만 옆에 나타난다
+      psel = h('select', { 'aria-label': '색각 유형' }, h('option', { value: 'deutan' }, '녹색약'), h('option', { value: 'protan' }, '적색약'), h('option', { value: 'tritan' }, '청황색약'));   // 색각 이상을 고른 때만 옆에 나타난다
       psel.addEventListener('change', () => { opts.colorType = psel.value; syncAll(); });
       pw = h('div', { class: 'psel' }, psel);
       return h('div', { class: 'prew' }, el, pw);
@@ -501,7 +501,10 @@
             if (st.status === 'running') { progress = st; render(); }
             else if (st.status === 'done') {
               clearInterval(timer); progress = { ...st, step: '내려받는 중', done: st.total };
-              render(); files = st.files; result = st; await Promise.all([adapter.save(files), trick()]); if (closed) return; state = 'done'; render();
+              render(); files = st.files; result = st;
+              try { await Promise.all([adapter.save(files), trick()]); }
+              catch (e) { if (closed) return; state = 'error'; msg = '변환은 끝났지만 파일을 저장하지 못했어요. ' + (e && e.message ? e.message : ''); render(); return; }      // 저장이 실패해도 "내려받는 중"에서 멈추지 않게
+              if (closed) return; state = 'done'; render();
             } else { clearInterval(timer); state = 'error'; msg = st.error || (st.status === 'cancelled' ? '취소했어요' : ''); render(); }
           } catch (e) {
             if (++fails >= 4) { clearInterval(timer); state = 'error'; msg = e.message; render(); }
@@ -555,7 +558,7 @@
 
     async function load() {
       if (cfg.batch) { runBatch(); return; }
-      if (cfg.settings) { job = 'settings'; info = { pages: 0, figures: 1, colorFigures: 1, ai: cfg.ai !== false, codeRequired: false }; state = 'ready'; render(); return; }
+      if (cfg.settings) { job = 'settings'; info = { pages: 0, figures: 1, colorFigures: 1, colorItems: 1, ai: cfg.ai !== false, codeRequired: false }; state = 'ready'; render(); return; }
       const auto = !!(cfg.auto && opts.profile);          // 처음에 정해 둔 방식이 있으면 고르는 단계 없이 바로 변환한다
       if (auto) { state = 'working'; progress = { done: 0, total: 0, step: '자료를 살펴보는 중' }; render(); }
       try {
@@ -579,7 +582,7 @@
   function preview(container, sample) {
     const adapter = {
       name: sample?.name || '2주차 학습자료', sub: sample?.sub || '경영정보시스템 (004)',
-      prepare: async () => ({ job: 'demo', info: sample?.info || { pages: 15, figures: 5, colorFigures: 2, scanned: 0, ai: true } }),
+      prepare: async () => ({ job: 'demo', info: sample?.info || { pages: 15, figures: 5, colorFigures: 2, colorItems: 3, scanned: 0, ai: true } }),
       loadOptions: async () => null, saveOptions: async () => {}, make: async () => 'x', status: async () => ({ status: 'running' }), save: async () => {}
     };
     return open({ adapter, container });

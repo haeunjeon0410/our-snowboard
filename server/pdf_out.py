@@ -77,14 +77,48 @@ def _fig_texts(b):
     return desc, inner, d.get("color_note", "")
 
 
-def _hidden(page, rect, text: str, fontfile: str):
-    """보이지 않는 글자(render_mode=3)를 rect 안에 넣는다. 안 들어가면 더 작은 글씨로 다시."""
+def _hidden(page, rect, text: str, fontfile: str) -> bool:
+    """보이지 않는 글자(render_mode=3)를 rect 안에 넣는다. 안 들어가면 더 작은 글씨로 다시, 그래도 안 되면 앞부분만이라도 넣는다 (전체는 보충 쪽에 있다)."""
     text = (text or "").strip()
     if not text:
-        return
+        return True
     for fs in (6, 4, 3, 2, 1.5):
         if page.insert_textbox(rect, text, fontsize=fs, fontname=FONT, fontfile=fontfile, render_mode=3) >= 0:
-            return
+            return True
+    for n in (600, 300, 150, 80, 40, 20):
+        if len(text) > n and page.insert_textbox(rect, text[:n] + "…", fontsize=1.5, fontname=FONT, fontfile=fontfile, render_mode=3) >= 0:
+            return True
+    return False
+
+
+def _underline_emphasis(page, pg, hc: bool) -> int:
+    """색(빨강 등)으로만 강조된 글씨에 굵은 밑줄 주석을 단다. 색을 구분하지 못해도 강조된 곳을 알 수 있다. 원본 글자는 그대로 두고 주석만 더한다. 단 개수를 돌려준다."""
+    phrases = []
+    for b in pg["blocks"]:
+        if b["type"] in ("paragraph", "heading"):
+            phrases += b.get("emph") or []
+        elif b["type"] == "list":
+            for it in b["items"]:
+                phrases += it.get("emph") or []
+    ink = (1, 0.9, 0) if hc else (0.1, 0.1, 0.1)
+    n, seen = 0, set()
+    for ph in phrases:
+        ph = re.sub(r"\s+", " ", ph).strip()
+        if len(ph) < 2 or ph in seen:
+            continue
+        seen.add(ph)
+        try:
+            quads = page.search_for(ph, quads=True)
+            if not quads:
+                continue
+            a = page.add_underline_annot(quads=quads)
+            a.set_colors(stroke=ink)
+            a.set_info(title="Our Snowboard", content="색으로만 강조된 글씨")
+            a.update()
+            n += 1
+        except Exception:
+            continue
+    return n
 
 
 # ───────────── 보충 쪽 (그림 설명 · 쉬운 한국어 · 영어 용어) ─────────────
@@ -218,12 +252,15 @@ def to_pdf(doc: dict, job_dir: Path, o: dict, title: str = "", brf: tuple | None
     out = pymupdf.open(str(tagged or base))
     tagged_ids = tagger.apply_alts(out, doc, o) if (tagged and o["figures"]) else set()                # 그림 설명을 Alt로 넣은 그림 (이 그림은 숨은 글자를 또 얹지 않는다)
     fixed = render._fix_all(doc, job_dir, o) if o["color"] else {}
+    emph_n = 0
 
     for pg in doc["pages"]:
         i = pg["n"] - 1
         if i >= len(out):
             break
         page = out[i]
+        if o["color"]:
+            emph_n += _underline_emphasis(page, pg, o["contrast"])
 
         if pg.get("ocr_done"):
             # 2) 스캔본: 원본 그림은 그대로 두고 AI가 읽은 글자를 보이지 않게 얹는다
@@ -256,9 +293,10 @@ def to_pdf(doc: dict, job_dir: Path, o: dict, title: str = "", brf: tuple | None
                         text += " 그림 속 글자: " + ", ".join(inner)
                     _hidden(page, rect, text, fontfile)
 
+    o["_emph_done"] = emph_n                            # 변환 요약에서 쓴다
     # 3-1) 고대비: 쪽마다 색 반전 막을 씌운다 (사진은 제외, 부록은 따로 검은 바탕으로 만든다)
     if o["contrast"]:
-        photos = _photo_figures(doc, job_dir)
+        photos = _photo_figures(doc, job_dir) | {bid for bid, v in fixed.items() if v[1]}      # 색 보정한 그림도 반전하지 않는다 (보정한 색이 뒤집히면 구분이 달라진다)
         for pg in doc["pages"]:
             i = pg["n"] - 1
             if i >= len(out):

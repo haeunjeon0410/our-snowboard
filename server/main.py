@@ -5,11 +5,12 @@
 import hmac
 import io
 import json
+import re
 import urllib.parse
 import urllib.request
 import zipfile
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -26,10 +27,17 @@ if config.PUBLIC:                                    # 공개 서버: 자기 주
     _ALLOWED_HOSTS.add(_pu.netloc)
     _ALLOWED_ORIGINS.add(f"{_pu.scheme}://{_pu.netloc}")
 
+_EXT_RE = (r"chrome-extension://(" + "|".join(map(re.escape, sorted(config.ALLOWED_EXTENSION_IDS))) + ")") if config.ALLOWED_EXTENSION_IDS else r"chrome-extension://.*"
+
+
+def _origin_ok(origin: str) -> bool:
+    return origin in _ALLOWED_ORIGINS or bool(re.fullmatch(_EXT_RE, origin))
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=sorted(_ALLOWED_ORIGINS),
-    allow_origin_regex=r"chrome-extension://.*",
+    allow_origin_regex=_EXT_RE,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -53,7 +61,7 @@ async def local_only_guard(request: Request, call_next):
         return JSONResponse({"detail": "허용되지 않은 접속입니다"}, status_code=403)
     if request.method not in ("GET", "HEAD", "OPTIONS"):
         origin = request.headers.get("origin")
-        if origin and origin not in _ALLOWED_ORIGINS and not origin.startswith("chrome-extension://"):
+        if origin and not _origin_ok(origin):
             return JSONResponse({"detail": "허용되지 않은 출처입니다"}, status_code=403)
     return await call_next(request)
 
@@ -87,9 +95,19 @@ def health(request: Request):
     return {"ok": True, "ai": ai_allowed(request), "codeRequired": bool(config.ACCESS_CODE) and llm.available(), "public": config.PUBLIC}
 
 
+_SITE_RE = re.compile(r"https://[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:\d{1,5})?")
+
+
 @app.get("/extension.zip")
-def extension_zip():
-    """확장 프로그램 설치 파일. 이 서버 주소를 넣어서 만들어 주므로 받아서 풀고 크롬에 추가하면 바로 이 서버로 연결된다."""
+def extension_zip(site: list[str] = Query(default=[])):
+    """확장 프로그램 설치 파일. 이 서버 주소를 넣어서 만들어 주므로 받아서 풀고 크롬에 추가하면 바로 이 서버로 연결된다.
+    다른 학교에서 쓰려면 /extension.zip?site=https://강의사이트주소 (강의 파일이 다른 주소에 있으면 site를 하나 더) 로 받으면 그 사이트에 버튼이 붙는다."""
+    sites = []
+    for s in site[:5]:
+        s = s.strip().rstrip("/").lower()
+        if not _SITE_RE.fullmatch(s):
+            raise HTTPException(400, "사이트 주소는 https://로 시작하는 주소여야 합니다 (예: https://lms.example.ac.kr)")
+        sites.append(s)
     base = config.PUBLIC_URL or f"http://localhost:{config.PORT}"
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
@@ -102,11 +120,14 @@ def extension_zip():
                 data = data.decode("utf-8").replace("const DEFAULT_SERVER = 'http://localhost:8790';", f"const DEFAULT_SERVER = '{base}';").encode("utf-8")
             elif rel == "manifest.json":
                 m = json.loads(data.decode("utf-8"))
-                m["host_permissions"] = sorted(set(m["host_permissions"]) | {base + "/*"})
+                extra = {s + "/*" for s in sites}
+                m["host_permissions"] = sorted(set(m["host_permissions"]) | {base + "/*"} | extra)
                 for cs in m["content_scripts"]:
                     if cs["js"] == ["mark.js"]:
                         cs["matches"] = sorted(set(cs["matches"]) | {base + "/*"})
-                m["web_accessible_resources"][0]["matches"] = sorted(set(m["web_accessible_resources"][0]["matches"]) | {base + "/*"})
+                    elif extra:
+                        cs["matches"] = sorted(set(cs["matches"]) | extra)
+                m["web_accessible_resources"][0]["matches"] = sorted(set(m["web_accessible_resources"][0]["matches"]) | {base + "/*"} | extra)
                 data = json.dumps(m, ensure_ascii=False, indent=2).encode("utf-8")
             z.writestr("our-snowboard-extension/" + rel, data)
     return Response(buf.getvalue(), media_type="application/zip", headers={"Content-Disposition": "attachment; filename=our-snowboard-extension.zip"})
@@ -143,7 +164,13 @@ async def prepare(request: Request, filename: str = "lecture.pdf", course: str =
         declared = 0
     if declared > MAX_UPLOAD:                          # 다 받기 전에 먼저 거절한다 (메모리를 아낀다)
         raise HTTPException(413, "파일이 너무 큽니다 (60MB 초과)")
-    body = await request.body()
+    chunks, got = [], 0
+    async for chunk in request.stream():               # 길이를 알리지 않고 보내는 요청도 상한을 넘으면 바로 끊는다
+        got += len(chunk)
+        if got > MAX_UPLOAD:
+            raise HTTPException(413, "파일이 너무 큽니다 (60MB 초과)")
+        chunks.append(chunk)
+    body = b"".join(chunks)
     kind = convert_office.kind(body[:16], filename)
     if not kind:
         raise HTTPException(400, "PDF나 PowerPoint 파일이 아닙니다")
@@ -211,9 +238,10 @@ def task_file(tid: str, kind: str):
 
 # ───────────── 읽어 주기 (AI 목소리) ─────────────
 @app.get("/api/tts")
-async def tts_speak(request: Request, v: str = "Kore", t: str = ""):
-    """문장 하나를 소리로. <audio>가 바로 가져가도록 GET으로 둔다."""
-    if not ai_allowed(request):
+async def tts_speak(request: Request, v: str = "Kore", t: str = "", k: str = ""):
+    """문장 하나를 소리로. <audio>가 바로 가져가도록 GET으로 둔다.
+    GET은 출처 검사를 안 거치므로, 변환한 웹 문서에만 들어 있는 비밀 값(k)이 맞을 때만 만든다 (다른 웹사이트가 내 크레딧으로 목소리를 만들지 못하게)."""
+    if not llm.available() or not hmac.compare_digest(k.encode("utf-8"), config.TTS_TOKEN.encode("utf-8")):
         raise HTTPException(403, "AI 목소리를 쓸 수 없어요")
     try:
         wav = await run_in_threadpool(tts.speak, t, v)

@@ -1,6 +1,5 @@
 """색각 이상 지원: 시뮬레이션, 색 보정(daltonize), 색으로만 구분된 영역에 무늬 덧씌우기, 색 이름."""
 import colorsys
-import io
 
 import numpy as np
 from PIL import Image
@@ -181,11 +180,15 @@ def _lab(rgb):
 GAINS = [0.0, 0.7, 1.0, 1.5, 2.2, 3.0]
 
 
-def best_gain(hexes, mode):
+PHOTO_GAINS = [0.0, 0.7, 1.0, 1.5, 2.2]  # 사진은 세게 옮기면 부자연스러워서 도식(최대 3.0)보다 낮게 제한한다
+PHOTO_MIN_GAIN_DE = 2.0                 # 보정으로 구분 정도(색차)가 이만큼 좋아질 때만 바꾼다 (별 차이 없는 사진을 괜히 물들이지 않는다)
+
+
+def best_gain(hexes, mode, gains=GAINS):
     """이 쪽의 색들이 가장 잘 구분되는 보정 세기를 고른다. (보정이 오히려 나쁘면 0 = 보정 없음)"""
     if len(hexes) < 2:
         return 1.0
-    scores = [(min_confusion(hexes, mode, True, g), -g) for g in GAINS]
+    scores = [(min_confusion(hexes, mode, True, g), -g) for g in gains]
     return -max(scores)[1]
 
 
@@ -223,12 +226,27 @@ def flat_fraction(img) -> float:
     return float((d <= 3)[colored].mean())
 
 
+def fix_photo(img, mode="deutan"):
+    """사진·현미경 이미지처럼 색이 번지는 그림: 주요 색들이 가장 잘 구분되는 세기로 색만 보정한다. 보정해도 나아지지 않으면 원본 그대로.
+    반환: (RGB 이미지, [{"photo": True, ...}]) — 보정했으면 목록이 비어 있지 않다."""
+    small = img.copy()
+    small.thumbnail((420, 420))
+    classes, _, _ = analyze(small, min_area=0.02)
+    if len(classes) < 2:
+        return img, []
+    hexes = [g["hex"] for g in classes]
+    gain = best_gain(hexes, mode, PHOTO_GAINS)
+    if gain <= 0 or min_confusion(hexes, mode, True, gain) - min_confusion(hexes, mode) < PHOTO_MIN_GAIN_DE:
+        return img, []
+    return daltonize(img, mode, gain), [{"name": "사진", "pattern": "", "photo": True, "gain": gain}]
+
+
 def fix_image(png_path, mode="deutan"):
     """색으로만 구분된 그림을 구분하기 쉽게: 색 보정(쪽마다 가장 잘 보이는 세기) + 같은 색에 같은 무늬.
     반환: (RGB 이미지, 범례 목록). 색이 2종류 미만이면 원본 그대로."""
     img = Image.open(png_path).convert("RGB")
-    if flat_fraction(img) < FLAT_MIN:                  # 사진처럼 색이 번지는 그림에는 무늬를 덮지 않는다
-        return img, []
+    if flat_fraction(img) < FLAT_MIN:                  # 사진처럼 색이 번지는 그림에는 무늬를 덮지 않고 색만 보정한다
+        return fix_photo(img, mode)
     classes, masks, cls = analyze(img)
     if len(classes) < 2:
         return img, []

@@ -189,7 +189,18 @@ check("11. 가로 슬라이드는 결과도 모든 쪽(보충 쪽 포함)이 가
 check("12. 가로 슬라이드의 원본 쪽 크기·방향이 같다", same_pages(src2, out4, len(src2)))
 photo_changed = sum(1 for i in range(len(src2)) if float(np.abs(px(src2, i) - px(out4, i)).mean()) > 0.05)
 n_fig2 = sum(1 for pg in doc2["pages"] for b in pg["blocks"] if b["type"] == "figure")
-check("13. 사진·현미경처럼 색이 번지는 그림에는 색 구분 무늬를 덮지 않는다", photo_changed <= 3, f"{len(src2)}쪽 중 {photo_changed}쪽만 바뀜 (그림 {n_fig2}개)")
+from PIL import Image as _Img
+from server import color as _color
+_photo_legs = []
+for pg in doc2["pages"]:
+    for b in pg["blocks"]:
+        if b["type"] == "figure" and (jobs.job_dir(jid2) / b["img"]).exists():
+            ip = jobs.job_dir(jid2) / b["img"]
+            if _color.flat_fraction(_Img.open(ip)) < _color.FLAT_MIN:
+                _photo_legs.append(_color.fix_image(ip, "deutan")[1])
+no_hatch = all(all(g.get("photo") and g["pattern"] == "" for g in leg) for leg in _photo_legs)
+check("13. 사진·현미경처럼 색이 번지는 그림은 무늬 없이 색만 보정한다 (보정으로 나아질 때만)", no_hatch and photo_changed >= 1,
+      f"{len(src2)}쪽 중 {photo_changed}쪽이 바뀜 · 사진류 {len(_photo_legs)}장 중 {sum(1 for l in _photo_legs if l)}장 보정 (그림 {n_fig2}개)")
 
 # ── 속도·안정성 점검 ──
 o_fx = dict(o, color=True)
@@ -201,7 +212,7 @@ check("24-1. 다른 자료로 넘어가면 보관한 값을 쓰지 않는다", f
 bad_words = [None, {}, {"ko": "경쟁"}, {"easy": "쉬움"}, "문자열", {"ko": "경쟁", "easy": "겨루기", "en": "x"}]
 try:
     ok_w = "겨루기" in _render._with_words("경쟁은 치열하다", bad_words, set())
-except Exception as ex:
+except Exception:
     ok_w = False
 check("25. 모양이 잘못된 단어 풀이 항목이 섞여도 죽지 않는다", ok_w)
 used_t = set()

@@ -1,6 +1,5 @@
 """변환 결과 파일 만들기: 체크한 항목을 하나로 합친 웹 문서(.html)와 점자 파일(.brf)."""
 import base64
-import hashlib
 import html as _html
 import io
 import json
@@ -122,7 +121,7 @@ D.addEventListener('keydown',e=>{if(e.key==='Escape'&&Q('.pl')&&!Q('.pl').hidden
 function score(v){const n=v.name;return(/natural|online|neural/i.test(n)?40:0)+(/google/i.test(n)?25:0)+(/sun-?hi|yuna|injoon|seoyeon|heami|flo|sandy/i.test(n)?10:0)+(v.localService?0:5)}
 function loadVoices(){voices=(syn?syn.getVoices():[]).filter(v=>/^ko/i.test(v.lang)).sort((a,b)=>score(b)-score(a))}
 function useAi(){return vname.indexOf('ai:')===0&&!aiFail}
-function aiUrl(t){return TTS+'/api/tts?v='+vname.slice(3)+'&t='+encodeURIComponent(t)}
+function aiUrl(t){return TTS+'/api/tts?v='+vname.slice(3)+'&k=__TTK__&t='+encodeURIComponent(t)}
 function stopAu(){if(au){au.onended=au.onerror=null;au.pause();au=null}}
 function note(m){const n=Q('.pl .nt');if(n){n.textContent=m;n.hidden=!m}}
 function pick(){return voices[0]}
@@ -294,11 +293,17 @@ def _figure_html(b, pg, job_dir: Path, o, fixed=None) -> str:
     if o["color"] and path.exists():
         img, pal = (fixed or {}).get(b["id"]) or color.fix_image(path, o["colorType"])
         if pal:
-            legend = '<span class="leg">색을 무늬로도 구분했어요: ' + ", ".join(f"{_e(g['name'])}={_e(g['pattern'])}" for g in pal[:6]) + "</span>"
+            legend = ('<span class="leg">사진의 색을 구분하기 쉽게 보정했어요</span>' if pal[0].get("photo") else
+                      '<span class="leg">색을 무늬로도 구분했어요: ' + ", ".join(f"{_e(g['name'])}={_e(g['pattern'])}" for g in pal[:6]) + "</span>")
     if img is None and path.exists():
         img = Image.open(path)
     tag = f'<img src="{_jpeg_b64(img)}" alt="{_e((desc or "그림")[:160])}">' if img is not None else ""
     if not o["figures"] or not desc:
+        inner = [t for t in dict.fromkeys(b.get("inner_text") or []) if t]
+        if tag and inner:                          # AI 설명이 없어도 그림 속 글자(원본에 글자로 있던 것)는 읽을 수 있게 둔다
+            det = f"<details open><summary>그림 속 글자 {len(inner)}개</summary><ul>" + "".join(f"<li>{_e(t)}</li>" for t in inner) + "</ul></details>"
+            speak = _e("그림. 그림 속 글자: " + ", ".join(inner))
+            return f'<figure class="r" data-s="{speak}">{tag}<figcaption>{det}{legend}</figcaption></figure>'
         return f"<figure>{tag}</figure>" if tag else ""
     texts = [t for t in dict.fromkeys((b.get("inner_text") or []) + (d.get("texts") or [])) if t]
     note = f' <b>색 설명</b> {_e(d["color_note"])}' if d.get("color_note") else ""
@@ -324,7 +329,7 @@ def to_html(doc: dict, job_dir: Path, o: dict, title: str = "") -> str:
         used: set = set()
         parts.append(f'<section aria-label="{pg["n"]}쪽"><p class="pg r" data-s="{pg["n"]}쪽">{pg["n"]}쪽</p>')
 
-        def text_of(obj, key, tag_ai=True):
+        def text_of(obj, key):
             h = _emph_html(obj["text"], obj.get("emph")) if (obj.get("emph") and o["color"]) else _e(obj["text"])
             return _with_terms(_with_words(h, words, used), terms, used)
 
@@ -351,7 +356,8 @@ def to_html(doc: dict, job_dir: Path, o: dict, title: str = "") -> str:
         parts.append("</section>")
     parts.append("<footer>Our Snowboard로 변환했어요. <span class=\"ai\" style=\"margin:0\">AI</span> 표시가 있는 내용은 AI가 만들었고 틀릴 수 있어요.</footer>")
     js = (JS.replace("__AIV__", json.dumps([[k, v] for k, v in tts.VOICES.items()], ensure_ascii=False))
-          .replace("__TTS__", config.PUBLIC_URL or f"http://localhost:{config.PORT}"))   # 내려받아 파일로 열어도 서버가 켜져 있으면 AI 목소리를 쓴다
+          .replace("__TTS__", config.PUBLIC_URL or f"http://localhost:{config.PORT}")
+          .replace("__TTK__", config.TTS_TOKEN if o.get("ai", True) else ""))   # 내려받아 파일로 열어도 서버가 켜져 있으면 AI 목소리를 쓴다
     # 고른 기능의 도구만 문서에 둔다 (큰 글씨만 골랐으면 글씨 크기 버튼만, 고대비만 골랐으면 대비 버튼만, 소리 읽기를 골랐을 때만 읽어 주기)
     groups = []
     if o["large"]:

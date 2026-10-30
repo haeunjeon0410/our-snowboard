@@ -71,15 +71,19 @@ def tag(original: Path, work_dir: Path) -> Path | None:
         shutil.rmtree(tmp, ignore_errors=True)
         tmp.mkdir(parents=True)
         with _lock:                                        # 환경 변수를 바꾸는 동안 다른 변환이 끼어들지 않게
-            old = dict(os.environ)
+            keys = ("JAVA_HOME", "PATH")
+            old = {k: os.environ.get(k) for k in keys}     # environ.clear()로 전부 비우면 그 사이 다른 스레드가 빈 환경을 읽는다. 바꾼 두 개만 되돌린다
             try:
                 if home:
                     os.environ["JAVA_HOME"] = home
-                    os.environ["PATH"] = str(Path(home) / "bin") + os.pathsep + os.environ.get("PATH", "")
+                    os.environ["PATH"] = str(Path(home) / "bin") + os.pathsep + (old["PATH"] or "")
                 opendataloader_pdf.convert(input_path=str(original), output_dir=str(tmp), format="tagged-pdf", quiet=True)
             finally:
-                os.environ.clear()
-                os.environ.update(old)
+                for k, v in old.items():
+                    if v is None:
+                        os.environ.pop(k, None)
+                    else:
+                        os.environ[k] = v
         made = next(tmp.glob("*_tagged.pdf"), None)
         if made is None:
             return None
@@ -87,6 +91,8 @@ def tag(original: Path, work_dir: Path) -> Path | None:
         shutil.rmtree(tmp, ignore_errors=True)
         return out
     except Exception:
+        import traceback
+        traceback.print_exc()                              # 조용히 None을 돌려주면 태그가 안 달린 이유를 알 수 없다 (서버 창에 남긴다)
         return None
 
 

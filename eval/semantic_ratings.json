@@ -1,0 +1,603 @@
+{
+ "protocol": "그림 설명(AI)을 원본 그림과 직접 대조해 채점: 정확=그림과 모순·누락 없음, 부분=핵심 구조는 맞지만 글자·사물·관계 일부를 잘못 읽음, 오류=핵심 내용이 그림과 반대이거나 틀림, 보류=눈으로 확정 못 함. 채점자는 Claude(설명을 만든 gpt-6-luna와 다른 모델). 사람의 재확인은 아직 없음.",
+ "sample1_tuning": {
+  "note": "방법을 만들고 조정한 표본이라 개선 효과가 낙관적임",
+  "n": 37,
+  "before": [
+   31,
+   36
+  ],
+  "after": [
+   35,
+   36
+  ],
+  "items": [
+   {
+    "doc": "NetSec_5.pdf",
+    "page": 15,
+    "figure": "p15b2",
+    "has_text_layer": false,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": false
+   },
+   {
+    "doc": "제9장.pdf",
+    "page": 7,
+    "figure": "p7b2",
+    "has_text_layer": false,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": true
+   },
+   {
+    "doc": "MIS_D03-S_Week03_Student_Learning_Guide_FULL_v1_7.pdf",
+    "page": 23,
+    "figure": "p23b6",
+    "has_text_layer": false,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": false
+   },
+   {
+    "doc": "NetSec_3.pdf",
+    "page": 10,
+    "figure": "p10b7",
+    "has_text_layer": false,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": false
+   },
+   {
+    "doc": "제10장.pdf",
+    "page": 9,
+    "figure": "p9b3",
+    "has_text_layer": false,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": true
+   },
+   {
+    "doc": "제5장.pdf",
+    "page": 6,
+    "figure": "p6b1",
+    "has_text_layer": false,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": false
+   },
+   {
+    "doc": "제4장.pdf",
+    "page": 20,
+    "figure": "p20b1",
+    "has_text_layer": false,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": false
+   },
+   {
+    "doc": "제10장.pdf",
+    "page": 11,
+    "figure": "p11b2",
+    "has_text_layer": false,
+    "before": "부분",
+    "note": "AHSCT를 AHSC로 오독",
+    "after": "정확",
+    "changed": true
+   },
+   {
+    "doc": "제9장.pdf",
+    "page": 18,
+    "figure": "p18b3",
+    "has_text_layer": false,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": false
+   },
+   {
+    "doc": "제10장.pdf",
+    "page": 20,
+    "figure": "p20b1",
+    "has_text_layer": false,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": false
+   },
+   {
+    "doc": "MIS_D03-S_Week03_Student_Learning_Guide_FULL_v1_7.pdf",
+    "page": 17,
+    "figure": "p17b8",
+    "has_text_layer": false,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": true
+   },
+   {
+    "doc": "제4장.pdf",
+    "page": 3,
+    "figure": "p3b3",
+    "has_text_layer": false,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": false
+   },
+   {
+    "doc": "NetSec_5.pdf",
+    "page": 12,
+    "figure": "p12b3",
+    "has_text_layer": false,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": false
+   },
+   {
+    "doc": "제5장.pdf",
+    "page": 12,
+    "figure": "p12b1",
+    "has_text_layer": false,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": false
+   },
+   {
+    "doc": "NetSec_3.pdf",
+    "page": 6,
+    "figure": "p6b4",
+    "has_text_layer": false,
+    "before": "오류",
+    "note": "막대그래프에서 가장 높은 막대는 e인데 f라고 설명",
+    "after": "정확",
+    "changed": true
+   },
+   {
+    "doc": "NetSec_5.pdf",
+    "page": 12,
+    "figure": "p12b4",
+    "has_text_layer": false,
+    "before": "부분",
+    "note": "블록 암호화를 금속 암호화로 오독 (흐름은 정확)",
+    "after": "정확",
+    "changed": true
+   },
+   {
+    "doc": "MIS_D03-S_Week03_Student_Learning_Guide_FULL_v1_7.pdf",
+    "page": 19,
+    "figure": "p19b7",
+    "has_text_layer": false,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": false
+   },
+   {
+    "doc": "제9장.pdf",
+    "page": 6,
+    "figure": "p6b8",
+    "has_text_layer": false,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": false
+   },
+   {
+    "doc": "제3장.pdf",
+    "page": 8,
+    "figure": "p8b2",
+    "has_text_layer": false,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": false
+   },
+   {
+    "doc": "제7장 (1).pdf",
+    "page": 10,
+    "figure": "p10b1",
+    "has_text_layer": false,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": false
+   },
+   {
+    "doc": "제7장 (1).pdf",
+    "page": 7,
+    "figure": "p7b1",
+    "has_text_layer": false,
+    "before": "부분",
+    "note": "화살표 방향 반대로 서술 (청반에서 대뇌로 뻗는데 대뇌에서 청반으로)",
+    "after": "정확",
+    "changed": true
+   },
+   {
+    "doc": "제7장 (1).pdf",
+    "page": 4,
+    "figure": "p4b3",
+    "has_text_layer": false,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": false
+   },
+   {
+    "doc": "제5장.pdf",
+    "page": 11,
+    "figure": "p11b1",
+    "has_text_layer": false,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": false
+   },
+   {
+    "doc": "제3장.pdf",
+    "page": 18,
+    "figure": "p18b1",
+    "has_text_layer": false,
+    "before": "정확",
+    "note": "이미지에 없는 시냅스 설명이 문맥에서 보강됨",
+    "after": "정확",
+    "changed": true
+   },
+   {
+    "doc": "제4장.pdf",
+    "page": 8,
+    "figure": "p8b2",
+    "has_text_layer": false,
+    "before": "부분",
+    "note": "촛불 유리 홀더를 유리컵과 노란색 음료로 오인",
+    "after": "정확",
+    "changed": true
+   },
+   {
+    "doc": "MIS_Week1_Student_Learning_Guide_v2.pdf",
+    "page": 9,
+    "figure": "p9b3",
+    "has_text_layer": true,
+    "before": "정확",
+    "note": "이미지에 없는 마지막 문장이 문맥에서 보강됨",
+    "after": "정확",
+    "changed": true
+   },
+   {
+    "doc": "MIS_D03-S_Week03_Student_Learning_Guide_FULL_v1_7.pdf",
+    "page": 7,
+    "figure": "p7b9",
+    "has_text_layer": true,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": false
+   },
+   {
+    "doc": "MIS_D03-S_Week03_Student_Learning_Guide_FULL_v1_7.pdf",
+    "page": 26,
+    "figure": "p26b4",
+    "has_text_layer": true,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": false
+   },
+   {
+    "doc": "MIS_Week1_Student_Learning_Guide_v2.pdf",
+    "page": 3,
+    "figure": "p3b4",
+    "has_text_layer": true,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": true
+   },
+   {
+    "doc": "제9장.pdf",
+    "page": 10,
+    "figure": "p10b3",
+    "has_text_layer": true,
+    "before": "보류",
+    "note": "CT에서 어두운 영역의 좌우 위치를 눈으로 확정 못 함",
+    "after": "보류",
+    "changed": true
+   },
+   {
+    "doc": "MIS_D04-S_Week04_Student_Learning_Guide_v3.pdf",
+    "page": 13,
+    "figure": "p13b15",
+    "has_text_layer": true,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": false
+   },
+   {
+    "doc": "MIS_D03-S_Week03_Student_Learning_Guide_FULL_v1_7.pdf",
+    "page": 9,
+    "figure": "p9b11",
+    "has_text_layer": true,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": false
+   },
+   {
+    "doc": "MIS_D04-S_Week04_Student_Learning_Guide_v3.pdf",
+    "page": 4,
+    "figure": "p4b22",
+    "has_text_layer": true,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": true
+   },
+   {
+    "doc": "MIS_Week1_Student_Learning_Guide_v2.pdf",
+    "page": 15,
+    "figure": "p15b4",
+    "has_text_layer": true,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": true
+   },
+   {
+    "doc": "MIS_D04-S_Week04_Student_Learning_Guide_v3.pdf",
+    "page": 13,
+    "figure": "p13b10",
+    "has_text_layer": true,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": false
+   },
+   {
+    "doc": "제3장.pdf",
+    "page": 6,
+    "figure": "p6b1",
+    "has_text_layer": true,
+    "before": "정확",
+    "note": "",
+    "after": "부분",
+    "changed": true
+   },
+   {
+    "doc": "제4장.pdf",
+    "page": 4,
+    "figure": "p4b2",
+    "has_text_layer": true,
+    "before": "정확",
+    "note": "",
+    "after": "정확",
+    "changed": false
+   }
+  ]
+ },
+ "heldout": {
+  "note": "방법을 정한 뒤 처음 본 표본 (순수 이미지만)",
+  "n": 25,
+  "before": [
+   22,
+   25
+  ],
+  "after": [
+   24,
+   25
+  ],
+  "flagged": 14,
+  "changed": 7,
+  "items": [
+   {
+    "doc": "제3장.pdf",
+    "page": 9,
+    "before": "정확",
+    "after": "오류",
+    "flagged": true,
+    "changed": true
+   },
+   {
+    "doc": "제7장 (1).pdf",
+    "page": 10,
+    "before": "정확",
+    "after": "정확",
+    "flagged": false,
+    "changed": false
+   },
+   {
+    "doc": "제7장 (1).pdf",
+    "page": 5,
+    "before": "정확",
+    "after": "정확",
+    "flagged": false,
+    "changed": false
+   },
+   {
+    "doc": "제9장.pdf",
+    "page": 5,
+    "before": "정확",
+    "after": "정확",
+    "flagged": false,
+    "changed": false
+   },
+   {
+    "doc": "제5장.pdf",
+    "page": 14,
+    "before": "정확",
+    "after": "정확",
+    "flagged": false,
+    "changed": false
+   },
+   {
+    "doc": "제4장.pdf",
+    "page": 19,
+    "before": "정확",
+    "after": "정확",
+    "flagged": false,
+    "changed": false
+   },
+   {
+    "doc": "제10장.pdf",
+    "page": 4,
+    "before": "정확",
+    "after": "정확",
+    "flagged": true,
+    "changed": false
+   },
+   {
+    "doc": "제10장.pdf",
+    "page": 13,
+    "before": "정확",
+    "after": "정확",
+    "flagged": false,
+    "changed": false
+   },
+   {
+    "doc": "제9장.pdf",
+    "page": 5,
+    "before": "정확",
+    "after": "정확",
+    "flagged": true,
+    "changed": true
+   },
+   {
+    "doc": "제9장.pdf",
+    "page": 16,
+    "before": "정확",
+    "after": "정확",
+    "flagged": false,
+    "changed": false
+   },
+   {
+    "doc": "제7장 (1).pdf",
+    "page": 15,
+    "before": "정확",
+    "after": "정확",
+    "flagged": false,
+    "changed": false
+   },
+   {
+    "doc": "제3장.pdf",
+    "page": 13,
+    "before": "정확",
+    "after": "정확",
+    "flagged": false,
+    "changed": false
+   },
+   {
+    "doc": "MIS_D04-S_Week04_Student_Learning_Guide_v3.pdf",
+    "page": 8,
+    "before": "정확",
+    "after": "정확",
+    "flagged": false,
+    "changed": false
+   },
+   {
+    "doc": "제10장.pdf",
+    "page": 8,
+    "before": "정확",
+    "after": "정확",
+    "flagged": true,
+    "changed": false
+   },
+   {
+    "doc": "제5장.pdf",
+    "page": 2,
+    "before": "정확",
+    "after": "정확",
+    "flagged": true,
+    "changed": false
+   },
+   {
+    "doc": "NetSec_5.pdf",
+    "page": 13,
+    "before": "정확",
+    "after": "정확",
+    "flagged": false,
+    "changed": false
+   },
+   {
+    "doc": "NetSec_5.pdf",
+    "page": 7,
+    "before": "정확",
+    "after": "정확",
+    "flagged": true,
+    "changed": false
+   },
+   {
+    "doc": "제5장.pdf",
+    "page": 10,
+    "before": "오류",
+    "after": "정확",
+    "flagged": true,
+    "changed": true
+   },
+   {
+    "doc": "제3장.pdf",
+    "page": 15,
+    "before": "정확",
+    "after": "정확",
+    "flagged": true,
+    "changed": true
+   },
+   {
+    "doc": "NetSec_5.pdf",
+    "page": 8,
+    "before": "정확",
+    "after": "정확",
+    "flagged": true,
+    "changed": false
+   },
+   {
+    "doc": "NetSec_3.pdf",
+    "page": 11,
+    "before": "부분",
+    "after": "정확",
+    "flagged": true,
+    "changed": true
+   },
+   {
+    "doc": "NetSec_3.pdf",
+    "page": 10,
+    "before": "정확",
+    "after": "정확",
+    "flagged": true,
+    "changed": false
+   },
+   {
+    "doc": "제4장.pdf",
+    "page": 18,
+    "before": "정확",
+    "after": "정확",
+    "flagged": true,
+    "changed": true
+   },
+   {
+    "doc": "MIS_D03-S_Week03_Student_Learning_Guide_FULL_v1_7.pdf",
+    "page": 24,
+    "before": "정확",
+    "after": "정확",
+    "flagged": true,
+    "changed": false
+   },
+   {
+    "doc": "NetSec_3.pdf",
+    "page": 10,
+    "before": "부분",
+    "after": "정확",
+    "flagged": true,
+    "changed": true
+   }
+  ]
+ }
+}

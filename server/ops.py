@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from . import color, config, enrich, jobs, llm, pdf_out, pdf_read, render, tagger
+from . import color, config, enrich, jobs, llm, pdf_out, pdf_read, render
 from .extract import _needs_spacing
 
 _POOL = ThreadPoolExecutor(max_workers=12)         # 쪽 단위 동시 처리 (AI 서버는 동시 32개까지 오류 없이 받았다)
@@ -27,8 +27,7 @@ _FILE_TAGS = [("large", "큰글씨"), ("read", "소리읽기"), ("contrast", "�
 
 def _file_tag(o) -> str:
     """파일 이름 끝에 붙일 말: 고른 기능을 가운데 점(·)으로 이어 쓴다. 프리셋과 같으면 프리셋 이름."""
-    web = o["html"] or o["readpdf"]
-    on = [n for k, n in _FILE_TAGS if o.get(k) and (web or k not in ("large", "read"))]
+    on = [n for k, n in _FILE_TAGS if o.get(k) and (k != "read" or o["html"])]       # 소리 읽기는 웹 문서에만 들어간다
     if set(on) == {"큰글씨", "고대비", "소리읽기"}:
         return "저시력"
     if set(on) == {"쉬운말", "영어용어"}:
@@ -79,13 +78,26 @@ def _color_count(job, b) -> int:
         img.thumbnail((420, 420))
         classes, _, _ = color.analyze(img, min_area=0.04)
         b["colors"] = len(classes)
-        if b["colors"] >= 2:                         # 사진처럼 색이 번지는 그림은 '색이 칠해진 그림'으로 세지 않는다
+        if b["colors"] >= 2:                         # 사진처럼 색이 번지는 그림은 도식(무늬를 넣는 그림)으로 세지 않고, 색 보정만 하는 '사진'으로 센다
             full = Image.open(jobs.job_dir(job["meta"]["id"]) / b["img"])
             if color.flat_fraction(full) < color.FLAT_MIN:
                 b["colors"] = 0
+                b["photo"] = True
     except Exception:
         b["colors"] = 0
     return b["colors"]
+
+
+def _emph_count(doc) -> int:
+    """원본에서 색으로만 강조된 글씨(빨간 글씨 등)의 수"""
+    n = 0
+    for pg in doc["pages"]:
+        for b in pg["blocks"]:
+            if b["type"] in ("paragraph", "heading"):
+                n += len(b.get("emph") or [])
+            elif b["type"] == "list":
+                n += sum(len(it.get("emph") or []) for it in b["items"])
+    return n
 
 
 def analyze(job, ai_ok: bool | None = None, light: bool = False) -> dict:
@@ -93,7 +105,7 @@ def analyze(job, ai_ok: bool | None = None, light: bool = False) -> dict:
     doc = job["doc"]
     figs = [b for pg in doc["pages"] for b in _figures(pg)]
     if light:        # 바로 변환할 때는 항목 표시용 색 도식 수를 세지 않는다 (기다리는 시간 단축)
-        return {"pages": doc["n_pages"], "figures": len(figs), "colorFigures": None,
+        return {"pages": doc["n_pages"], "figures": len(figs), "colorFigures": None, "colorItems": None,
                 "scanned": sum(1 for pg in doc["pages"] if _scanned(pg)),
                 "ai": llm.available() if ai_ok is None else ai_ok,
                 "codeRequired": bool(config.ACCESS_CODE) and llm.available() and not ai_ok}
@@ -102,9 +114,12 @@ def analyze(job, ai_ok: bool | None = None, light: bool = False) -> dict:
     if len(todo) > 4:
         list(_FIG_POOL.map(lambda b: _color_count(job, b), todo))      # 그림이 많으면 색 종류 세기를 동시에
     colored = sum(1 for b in figs if _color_count(job, b) >= 2)
+    photos = sum(1 for b in figs if b.get("photo"))
+    emph = _emph_count(doc)
     if changed:
         jobs.save(job)
-    return {"pages": doc["n_pages"], "figures": len(figs), "colorFigures": colored,
+    return {"pages": doc["n_pages"], "figures": len(figs), "colorFigures": colored, "colorPhotos": photos, "emphasis": emph,
+            "colorItems": colored + photos + emph,
             "scanned": sum(1 for pg in doc["pages"] if _scanned(pg)),
             "ai": llm.available() if ai_ok is None else ai_ok,
             "codeRequired": bool(config.ACCESS_CODE) and llm.available() and not ai_ok}
@@ -129,7 +144,7 @@ MIN_TEXT_FOR_AI = 25          # 한 쪽의 글이 이보다 짧으면 단어 뜻
 MAX_AI_FIGURES = 150          # 한 번의 변환에서 AI가 설명할 그림의 상한 (아주 큰 자료 하나가 크레딧을 한꺼번에 쓰지 않게)
 
 
-def _start_text_jobs(pg, o) -> dict:
+def _start_text_jobs(pg, o, course: str = "") -> dict:
     """쪽의 글을 풀이하는 AI 호출(단어 뜻, 영어 용어)을 동시에 시작하고 {결과 키: 진행 중인 작업}을 돌려준다."""
     items = _texts(pg)
     if items and sum(len(t) for _, t in items) < MIN_TEXT_FOR_AI:        # 제목만 있는 쪽 등은 풀이할 것이 없으니 AI를 부르지 않는다 (크레딧 절약)
@@ -142,11 +157,11 @@ def _start_text_jobs(pg, o) -> dict:
     want_easy = o["easy"] and pg.get("easy_words") is None and items
     want_terms = o["terms"] and pg.get("terms") is None and items
     if want_easy and want_terms:                            # 둘 다 필요하면 같은 글을 두 번 보내지 않고 한 번에 묻는다
-        running["both"] = _FIG_POOL.submit(enrich.words_and_terms, texts)
+        running["both"] = _FIG_POOL.submit(enrich.words_and_terms, texts, course)
     elif want_easy:
-        running["easy_words"] = _FIG_POOL.submit(enrich.easy_words, texts)
+        running["easy_words"] = _FIG_POOL.submit(enrich.easy_words, texts, course)
     elif want_terms:
-        running["terms"] = _FIG_POOL.submit(enrich.english_terms, texts)
+        running["terms"] = _FIG_POOL.submit(enrich.english_terms, texts, course)
     return running
 
 
@@ -182,7 +197,7 @@ def _work_page(job, pg, o, budget: dict | None = None) -> bool:
     # 2) 그림 설명 (체크했을 때, 또는 스캔본이라 글자를 읽어야 할 때)
     ctx = (f"[과목: {course}] " if course else "") + " ".join(b.get("text", "") for b in pg["blocks"] if b["type"] in ("heading", "paragraph"))
     scanned = _scanned(pg)
-    early = None if scanned else _start_text_jobs(pg, o)        # 단어 뜻·영어 용어는 그림 설명을 기다리지 않고 동시에 시작한다 (스캔본은 읽어 낸 글이 생긴 뒤에)
+    early = None if scanned else _start_text_jobs(pg, o, course)        # 단어 뜻·영어 용어는 그림 설명을 기다리지 않고 동시에 시작한다 (스캔본은 읽어 낸 글이 생긴 뒤에)
     if o["figures"] or scanned:
         todo = [b for b in _figures(pg) if not b.get("ai_desc") and not (b.get("fullpage") and not scanned)]
         if budget is not None and todo:                     # 남은 그림 수만큼만 설명한다
@@ -206,7 +221,7 @@ def _work_page(job, pg, o, budget: dict | None = None) -> bool:
             pg["ocr_done"] = True
     # 3) 쉬운 한국어 / 영어 병기
     if early is None:
-        early = _start_text_jobs(pg, o)
+        early = _start_text_jobs(pg, o, course)
     for key, fut in early.items():
         res = fut.result()
         if key == "both":
@@ -229,7 +244,7 @@ def _clean_options(raw: dict) -> dict:
     for k, v in (raw or {}).items():
         if k in o:
             o[k] = v if k == "colorType" else bool(v)
-    if o["colorType"] not in ("deutan", "tritan"):
+    if o["colorType"] not in ("deutan", "protan", "tritan"):
         o["colorType"] = "deutan"
     if not (o["pdf"] or o["readpdf"] or o["html"] or o["braille"]):      # 받는 형식이 하나도 없으면 원본 PDF
         o["pdf"] = True
@@ -276,13 +291,16 @@ def _ensure_colors(job, o):
 def _summary(job, o) -> list[str]:
     """이번 변환에서 사용자가 고른 항목의 결과만 짧게 (센 값만 쓴다). 고르지 않은 일은 적지 않고, 원본 PDF의 글자에 적용되지 않는 일도 적지 않는다."""
     doc = job["doc"]
-    reflow = o["html"] or o["readpdf"] or o["braille"]
+    reflow = True                                                       # PDF·웹 문서·점자 모두 글을 다시 배치한 결과라 띄어쓰기 복원 등이 모두 반영된다
     figs = [b for pg in doc["pages"] for b in _figures(pg) if b.get("ai_desc") and not b.get("fullpage")]
     restored = sum(1 for pg in doc["pages"] for b in pg["blocks"] if b["type"] in ("paragraph", "heading") and b.get("raw_text") and b["raw_text"] != b["text"])
     ocr = sum(1 for pg in doc["pages"] if pg.get("ocr_done"))
     easy = sum(len(pg.get("easy_words") or []) for pg in doc["pages"])
     terms = sum(len(pg.get("terms") or []) for pg in doc["pages"])
-    colored = sum(1 for pg in doc["pages"] for b in _figures(pg) if b.get("colors", 0) >= 2)
+    fx = render._fix_all(doc, jobs.job_dir(job["meta"]["id"]), o) if o["color"] else {}
+    colored = sum(1 for v in fx.values() if v[1] and not v[1][0].get("photo"))
+    photos = sum(1 for v in fx.values() if v[1] and v[1][0].get("photo"))
+    emph_n = _emph_count(doc)
     nfig = sum(len(_figures(pg)) for pg in doc["pages"])
     out = []
     if restored and reflow:
@@ -293,7 +311,14 @@ def _summary(job, o) -> list[str]:
     if o["figures"]:
         out.append(f"그림 {len(figs)}개에 설명을 붙였어요" + (f" (그림 속 글자가 PDF와 덜 맞는 {flagged}개는 확인이 필요해요)" if flagged else "") if figs else ("설명을 붙일 그림이 없었어요" if not nfig else "그림 설명은 AI를 쓸 수 없어 건너뛰었어요"))
     if o["color"]:
-        out.append(f"색으로 칠한 도식 {colored}개를 구분하기 쉽게 바꿨어요" if colored else "색으로 구분된 도식이 없어서 바꾼 곳은 없어요")
+        bits = []
+        if colored:
+            bits.append(f"색으로 칠한 도식 {colored}개를 구분하기 쉽게 바꿨어요")
+        if photos:
+            bits.append(f"사진 {photos}장의 색을 보정했어요")
+        if emph_n:
+            bits.append(f"색으로만 강조된 글씨 {emph_n}곳을 굵은 밑줄로 바꿨어요")
+        out.extend(bits or ["색으로 구분된 곳이 없어서 바꾼 곳은 없어요"])
     if o["easy"]:
         out.append(f"어려운 단어 {easy}개에 쉬운 말을 붙였어요" if easy else "풀이를 붙일 어려운 단어가 없었어요")
     if o["terms"]:
@@ -302,7 +327,7 @@ def _summary(job, o) -> list[str]:
         out.append(f"{doc['n_pages']}쪽을 한글 점자로 옮겼어요")
     if o["contrast"]:
         out.append("검정 바탕의 고대비로 바꿨어요")
-    if o["large"] and (o["html"] or o["readpdf"]):
+    if o["large"]:
         out.append("큰 글씨로 다시 정리했어요")
     if o.get("read") and o["html"]:
         out.append("문서 안에 소리로 읽어 주기를 넣었어요")
@@ -341,7 +366,7 @@ def _compares(job, o) -> list[dict]:
     def add(label, **kw):
         out.append({"label": label, **kw})
 
-    reflow = o["html"] or o["readpdf"] or o["braille"]
+    reflow = True
     try:
         if o["figures"]:                                            # 그림 → 그림 설명
             for pg in doc["pages"]:
@@ -356,7 +381,7 @@ def _compares(job, o) -> list[dict]:
         if o["color"]:                                              # 색 도식 → 보정·무늬
             for pg in doc["pages"]:
                 for b in _figures(pg):
-                    if b.get("colors", 0) >= 2:
+                    if b.get("colors", 0) >= 2 or b.get("photo"):
                         res = render._fix_all(doc, d, o).get(b["id"])         # 파일을 만들 때 계산해 둔 보정본을 쓴다
                         if res and res[1]:
                             add("색 구분", page=pg["n"], beforeImg=thumb(Image.open(d / b["img"])), afterImg=thumb(res[0]))
@@ -396,7 +421,7 @@ def _compares(job, o) -> list[dict]:
             add("점자", page=n, before=text[:36], after=B.encode(text[:36]))
         if o["contrast"]:                                           # 보통 → 고대비
             add("고대비", page=n, before=text[:60], after=text[:60], style="hc")
-        if o["large"] and (o["html"] or o["readpdf"]):              # 보통 → 큰 글씨
+        if o["large"]:                                              # 보통 → 큰 글씨
             add("큰 글씨", page=n, before=text[:50], after=text[:50], style="large")
     try:
         scan = next((b for pg in doc["pages"] if pg.get("ocr_done") for b in _figures(pg) if b.get("fullpage") and (b.get("ai_desc") or {}).get("texts")), None)
@@ -413,12 +438,20 @@ def _safe_name(s: str) -> str:
 
 
 def _run(job, o, task):
+    """같은 자료를 옵션만 바꿔 동시에 변환하면 두 작업이 같은 문서를 함께 고치므로, 자료마다 하나씩 차례로 한다 (그림도 두 번 설명하지 않는다)."""
+    lk = job.setdefault("run", threading.Lock())
+    if not lk.acquire(blocking=False):
+        task["step"] = "앞서 시작한 변환이 끝나기를 기다리는 중"
+        lk.acquire()
+    try:
+        _run_locked(job, o, task)
+    finally:
+        lk.release()
+
+
+def _run_locked(job, o, task):
     try:
         doc = job["doc"]
-        tag_th = None
-        if o["pdf"] and o.get("tagged", True) and tagger.available():            # 구조 태그 달기(14초쯤)는 AI 작업과 동시에 시작한다
-            tag_th = threading.Thread(target=tagger.tag, args=(jobs.job_dir(job["meta"]["id"]) / "original.pdf", jobs.job_dir(job["meta"]["id"])), daemon=True)
-            tag_th.start()
         work = [pg for pg in doc["pages"] if _needs_work(pg, o)]
         task["total"] = len(work)
         if work:
@@ -472,17 +505,11 @@ def _run(job, o, task):
             task["note"] = (task["note"] + " / " if task["note"] else "") + "PDF를 만들 한글 글꼴이 없어 웹 문서로 만들었어요"
         brf_text = render.to_brf(doc, o) if o["braille"] else None
         tag = _file_tag(o)
-        if tag_th is not None:
-            tag_th.join()
-        if o["pdf"]:
+        if o["pdf"] or o["readpdf"]:                                    # PDF는 원본 쪽마다 한 쪽씩 다시 배치한 읽기용 PDF 하나다 (큰 글씨·단어 뜻·영어·색 보정이 본문에 바로 반영된다)
             pdf_path = out_dir / f"{base} ({tag}).pdf"
             brf_att = (f"{base} (점자).brf", brf_text) if brf_text else None       # PDF 한 파일에도 점자가 들어 있게
-            pdf_path.write_bytes(pdf_out.to_pdf(doc, jobs.job_dir(meta["id"]), o, title=title, brf=brf_att))
+            pdf_path.write_bytes(pdf_read.to_read_pdf(doc, jobs.job_dir(meta["id"]), o, title=title, brf=brf_att))
             files.append({"kind": "pdf", "name": pdf_path.name, "path": str(pdf_path)})
-        if o["readpdf"]:
-            rp = out_dir / f"{base} ({tag}).pdf"
-            rp.write_bytes(pdf_read.to_read_pdf(doc, jobs.job_dir(meta["id"]), o, title=title))
-            files.append({"kind": "readpdf", "name": rp.name, "path": str(rp)})
         if o["html"]:
             html_path = out_dir / f"{base} ({tag}).html"
             html_path.write_text(render.to_html(doc, jobs.job_dir(meta["id"]), o, title=title), encoding="utf-8")

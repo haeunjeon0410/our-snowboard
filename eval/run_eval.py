@@ -182,7 +182,6 @@ def figure_eval(docs):
 
 def color_eval(docs):
     rows = []
-    allv = {"normal": [], "deutan": ([], []), "protan": ([], []), "tritan": ([], [])}
     for name, (jid, doc) in docs.items():
         n_pg = 0
         per = {m: ([], []) for m in ("deutan", "protan", "tritan")}
